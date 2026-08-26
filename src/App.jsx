@@ -286,7 +286,7 @@ function ItemImage({src,size=48}){
 function ItemCard({item,onOpen}){
   const rarity=RARITY_META[item.rarity];
   return (
-    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:`6px 6px 0 ${A}`,padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
+    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
         <ItemImage src={item.icon} size={52}/>
         <div style={{flex:1,minWidth:0}}>
@@ -308,7 +308,7 @@ function ItemCard({item,onOpen}){
 
 function ItemDetail({item,onClose}){
   const rarity=RARITY_META[item.rarity];
-  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"]];
+  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"]];
   if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
@@ -571,7 +571,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
-    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",icon:""};
+    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",icon:""};
     onItemsChange([...items,created]);setSelId(created.uid);
   };
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
@@ -579,11 +579,11 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const refreshTier=async()=>{
     if(!sel)return;
     if(!sel.tag){setTierStatus("Укажите tag");return}
-    setTierStatus("Получаем tier…");
+    setTierStatus("Получаем данные из Weapon Analytics…");
     try{
-      const tier=await window.workspaceGoogle?.fetchTier(sel.tag);
-      update({tier:tier||""});
-      setTierStatus(tier?`Tier: ${tier}`:"Не найдено в таблице");
+      const info=await window.workspaceGoogle?.fetchTier(sel.tag);
+      update({tier:info?.tier||"",sheetType:info?.type||"",sheetRarity:info?.rarity||""});
+      setTierStatus(info?.tier||info?.type||info?.rarity?`найдено: tier ${info?.tier||"—"}, type ${info?.type||"—"}, rarity ${info?.rarity||"—"}`:"Не найдено в таблице");
     }catch(e){setTierStatus("Ошибка: "+e.message)}
   };
   return <>
@@ -618,8 +618,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
         <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>setLibraryOpen(true)}>Из библиотеки</button><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Своё изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
         {libraryOpen&&<IconLibraryPicker onSelect={path=>{update({icon:path,iconName:""});setLibraryOpen(false)}} onClose={()=>setLibraryOpen(false)}/>}
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier</button>
-          <span style={{fontSize:11,color:T2}}>{tierStatus||(sel.tier?`текущий tier: ${sel.tier}`:"tier не указан")}</span>
+          <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier/type/rarity</button>
+          <span style={{fontSize:11,color:T2}}>{tierStatus||(sel.tier||sel.sheetType||sel.sheetRarity?`текущие: tier ${sel.tier||"—"}, type ${sel.sheetType||"—"}, rarity ${sel.sheetRarity||"—"}`:"данные из таблицы не указаны")}</span>
         </div>
         <button className="danger-button" onClick={removeItem}><FiTrash2/>удалить предмет</button>
       </div>}

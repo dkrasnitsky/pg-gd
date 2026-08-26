@@ -174,13 +174,11 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
   const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:J`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   const rows=valuesResponse.values||[];
+  const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
   for(const row of rows){
     const cell=String(row[0]??"").trim().toLowerCase();
     if(cell&&cell===needle){
-      const tier=row[5];
-      const text=tier===undefined||tier===null?"":String(tier).trim();
-      if(!text||text.startsWith("#"))return null;
-      return text;
+      return {tier:clean(row[5]),type:clean(row[2]),rarity:clean(row[3])};
     }
   }
   return null;
