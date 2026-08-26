@@ -172,13 +172,15 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
   if(!sheet)throw new Error("Лист Weapon Analytics с указанным gid не найден");
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:K`)}?majorDimension=ROWS`);
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:J`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   const rows=valuesResponse.values||[];
   for(const row of rows){
     const cell=String(row[0]??"").trim().toLowerCase();
     if(cell&&cell===needle){
-      const tier=row[6];
-      return tier!==undefined&&tier!==""?String(tier):null;
+      const tier=row[5];
+      const text=tier===undefined||tier===null?"":String(tier).trim();
+      if(!text||text.startsWith("#"))return null;
+      return text;
     }
   }
   return null;

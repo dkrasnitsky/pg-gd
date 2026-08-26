@@ -311,7 +311,7 @@ function ItemDetail({item,onClose}){
   const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"]];
   if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
-    <div className="event-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+    <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal">
         <header><div><span>ITEM DATA</span><h2>{item.name||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
         <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:6}}>
