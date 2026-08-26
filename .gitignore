@@ -46,3 +46,6 @@ local-secrets/
 *.njsproj
 *.sln
 *.sw?
+
+# large local item-icon asset library, not tracked in git
+public/icons-items/

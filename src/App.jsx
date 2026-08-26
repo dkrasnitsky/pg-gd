@@ -348,7 +348,10 @@ function ContentPicker({items=[]}){
   const [settingFilter,setSettingFilter]=useState(()=>new Set());
   const [showFilters,setShowFilters]=useState(false);
   const [openItem,setOpenItem]=useState(null);
-  const settingsPool=useMemo(()=>[...new Set(items.map(i=>i.setting).filter(Boolean))].sort(),[items]);
+  const settingsPool=useMemo(()=>{
+    const all=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
+    return [...new Set(all)].sort();
+  },[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
   const filtered=useMemo(()=>{
     const q=query.trim().toLowerCase();
@@ -359,7 +362,10 @@ function ContentPicker({items=[]}){
       }
       if(typeFilter.size&&!typeFilter.has(it.type))return false;
       if(rarityFilter.size&&!rarityFilter.has(it.rarity))return false;
-      if(settingFilter.size&&!settingFilter.has(it.setting))return false;
+      if(settingFilter.size){
+        const itemSettings=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
+        if(!itemSettings.some(s=>settingFilter.has(s)))return false;
+      }
       return true;
     });
   },[items,query,typeFilter,rarityFilter,settingFilter]);
@@ -516,8 +522,14 @@ function OCard({offer,onUpdate,onRemove,onDuplicate}){
 function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const [selId,setSelId]=useState(null);
   const [tierStatus,setTierStatus]=useState("");
+  const [listQuery,setListQuery]=useState("");
   const iconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
+  const visibleItems=useMemo(()=>{
+    const q=listQuery.trim().toLowerCase();
+    if(!q)return items;
+    return items.filter(i=>[i.name,i.id,i.tag].some(v=>String(v??"").toLowerCase().includes(q)));
+  },[items,listQuery]);
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
@@ -543,8 +555,9 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
         <button type="button" onClick={onSwitchMode} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${BRD}`,background:"transparent",color:T2,fontSize:11,cursor:"pointer"}}>Навигация</button>
         <button type="button" style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${A}`,background:A,color:"#000",fontSize:11,fontWeight:700,cursor:"pointer"}}>Каталог</button>
       </div>
+      <input value={listQuery} onChange={e=>setListQuery(e.target.value)} placeholder="Поиск по названию, id или tag…" style={{width:"100%",boxSizing:"border-box",marginBottom:8,padding:"8px 10px",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,outline:"none"}}/>
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
-      <div className="settings-list">{items.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{i.name||"Без названия"}</span><FiChevronRight/></button>)}</div>
+      <div className="settings-list">{visibleItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{i.name||"Без названия"}</span><FiChevronRight/></button>)}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
     </aside>
     <section className="settings-editor">
       <header><div><span>Каталог предметов</span><h2>{sel?sel.name||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
@@ -559,7 +572,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
           <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
           <label>Редкость<select value={sel.rarity} onChange={e=>update({rarity:e.target.value})}>{ITEM_RARITIES.map(r=><option key={r} value={r}>{r}</option>)}</select></label>
         </div>
-        <label>Сеттинг<input value={sel.setting} onChange={e=>update({setting:e.target.value})} placeholder="например, Winter"/></label>
+        <label>Сеттинг<input value={sel.setting} onChange={e=>update({setting:e.target.value})} placeholder="например, Winter, Chinese — через запятую"/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
           <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
