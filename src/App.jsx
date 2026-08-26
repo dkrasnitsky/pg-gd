@@ -112,7 +112,9 @@ const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
 const SALE_LOCATIONS=["Lottery","CardRoulette","PersonalEvent","TemplateEvent","Offer","PixelPass"];
 const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",PersonalEvent:"Personal Event",TemplateEvent:"Template Event",Offer:"Offer",PixelPass:"Pixel Pass"};
 const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",PersonalEvent:"👤",TemplateEvent:"📋",Offer:"🏷",PixelPass:"🎫"};
-const RARITY_META={Common:{label:"Обычная",color:T2},Rare:{label:"Редкая",color:"#62a7e8"},Epic:{label:"Эпическая",color:"#8f83e8"},Legendary:{label:"Легендарная",color:"#e8b26b"},Mythic:{label:"Мифическая",color:"#e77c91"}};
+const RARITY_META={Common:{label:"Обычная",color:"#e5e5e5"},Rare:{label:"Редкая",color:"#3b82f6"},Epic:{label:"Эпическая",color:"#fbbf24"},Legendary:{label:"Легендарная",color:"#f97316"},Mythic:{label:"Мифическая",color:"#a855f7"}};
+function effectiveRarity(item){return item?.sheetRarity||item?.rarity||""}
+function rarityMetaFor(value){const key=Object.keys(RARITY_META).find(k=>k.toLowerCase()===String(value||"").trim().toLowerCase());return key?RARITY_META[key]:null}
 function fmtItemDate(value){if(!value)return "—";const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"})}
 
 function Icon({type,color="#fff",sz=15}){
@@ -284,7 +286,7 @@ function ItemImage({src,size=48}){
 }
 
 function ItemCard({item,onOpen}){
-  const rarity=RARITY_META[item.rarity];
+  const rarity=rarityMetaFor(effectiveRarity(item));
   return (
     <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
@@ -307,7 +309,7 @@ function ItemCard({item,onOpen}){
 }
 
 function ItemDetail({item,onClose}){
-  const rarity=RARITY_META[item.rarity];
+  const rarity=rarityMetaFor(effectiveRarity(item));
   const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"]];
   if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
@@ -361,7 +363,7 @@ function ContentPicker({items=[]}){
         if(!hay.some(v=>v.includes(q)))return false;
       }
       if(typeFilter.size&&!typeFilter.has(it.type))return false;
-      if(rarityFilter.size&&!rarityFilter.has(it.rarity))return false;
+      if(rarityFilter.size&&!rarityFilter.has(effectiveRarity(it)))return false;
       if(settingFilter.size){
         const itemSettings=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
         if(!itemSettings.some(s=>settingFilter.has(s)))return false;
@@ -606,10 +608,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
           <label>Parts<input value={sel.parts} onChange={e=>update({parts:e.target.value})} placeholder="none"/></label>
         </div>
         <label>Tag (для поиска и подтягивания tier)<input value={sel.tag} onChange={e=>update({tag:e.target.value})} onBlur={refreshTier} placeholder="совпадает с колонкой E в Weapon Analytics"/></label>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
-          <label>Редкость<select value={sel.rarity} onChange={e=>update({rarity:e.target.value})}>{ITEM_RARITIES.map(r=><option key={r} value={r}>{r}</option>)}</select></label>
-        </div>
+        <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
         <label>Сеттинг<input value={sel.setting} onChange={e=>update({setting:e.target.value})} placeholder="например, Winter, Chinese — через запятую"/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
