@@ -632,6 +632,13 @@ function normalizeNavigation(source){
       const merged=items.some(item=>item.url===SHEETS_URL)?items:[legacySheet,...items];
       return{...previous,items:applyLinkIcons(merged)};
     }
+    if(defaultSection.id==="tools"){
+      const items=Array.isArray(previous.items)?previous.items:[];
+      const byItemId=new Map(items.map(entry=>[entry.id,entry]));
+      const merged=defaultSection.items.map(def=>byItemId.get(def.id)||def);
+      const extras=items.filter(entry=>!defaultSection.items.some(def=>def.id===entry.id));
+      return{...previous,items:[...merged,...extras]};
+    }
     return{...previous,items:applyLinkIcons(Array.isArray(previous.items)?previous.items:defaultSection.items)};
   });
 }
