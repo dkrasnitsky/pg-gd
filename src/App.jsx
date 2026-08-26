@@ -286,21 +286,21 @@ function ItemImage({src,size=48}){
 function ItemCard({item,onOpen}){
   const rarity=RARITY_META[item.rarity];
   return (
-    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:STRIPE,border:`1px solid ${BRD}`,borderRadius:12,padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
+    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:`6px 6px 0 ${A}`,padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
         <ItemImage src={item.icon} size={52}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:6}}>{item.name||"Без названия"}</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:10,fontWeight:700,color:T1,textTransform:"uppercase",letterSpacing:.3}}><span style={{width:6,height:6,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
-            {item.tier&&<span style={{padding:"3px 9px",borderRadius:20,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:800}}>{item.tier}</span>}
+          <div style={{fontSize:14,fontWeight:800,color:"#fff",textTransform:"uppercase",letterSpacing:.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:6}}>{item.name||"без названия"}</div>
+          <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}>
+            {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:T1}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
+            {item.tier&&<span style={{padding:"2px 8px",borderRadius:2,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:800}}>{item.tier}</span>}
           </div>
         </div>
       </div>
-      <div style={{fontSize:11,color:T2,display:"flex",flexDirection:"column",gap:3}}>
-        <div>id: <span style={{color:T1}}>{item.id||"—"}</span></div>
-        <div>parts: <span style={{color:T1}}>{item.parts||"none"}</span></div>
-        {item.lastSale&&<div style={{display:"flex",alignItems:"center",gap:5}}>last sale: <span style={{color:T1}}>{fmtItemDate(item.lastSale)}</span>{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12,opacity:.85}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>}
+      <div style={{fontSize:12,color:T2,display:"flex",flexDirection:"column",gap:4}}>
+        <div>ID: <span style={{color:T1}}>{item.id||"—"}</span></div>
+        <div>Parts: <span style={{color:T1}}>{item.parts||"None"}</span></div>
+        {item.lastSale&&<div style={{display:"flex",alignItems:"center",gap:5}}>Last sale: <span style={{color:T1}}>{fmtItemDate(item.lastSale)}</span>{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12,opacity:.85}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>}
       </div>
     </div>
   );
@@ -308,19 +308,19 @@ function ItemCard({item,onOpen}){
 
 function ItemDetail({item,onClose}){
   const rarity=RARITY_META[item.rarity];
-  const rows=[["ID",item.id||"—"],["Parts",item.parts||"none"],["Tag",item.tag||"—"],["Type",item.type||"—"],["Rarity",rarity?rarity.label:(item.rarity||"—")],["Setting",item.setting||"—"],["Tier",item.tier||"—"]];
-  if(item.lastSale){rows.push(["Last sale",fmtItemDate(item.lastSale)]);rows.push(["Sale location",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
+  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"]];
+  if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
-    <div style={{position:"absolute",inset:0,zIndex:50,background:BG,borderRadius:16,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <ZzzHeader onBack={onClose} title={item.name||"Предмет"}/>
-      <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",gap:20}}>
-        <ItemImage src={item.icon} size={140}/>
-        <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignContent:"start"}}>
+    <div className="event-modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="event-modal">
+        <header><div><span>ITEM DATA</span><h2>{item.name||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
+        <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:6}}>
+          <ItemImage src={item.icon} size={72}/>
+          {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
+        </div>
+        <div className="form-columns">
           {rows.map(([l,v])=>(
-            <div key={l} style={{background:"#1a1a22",borderRadius:10,padding:"10px 12px"}}>
-              <div style={{fontSize:9,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:600,marginBottom:4}}>{l}</div>
-              <div style={{fontSize:13,color:T1,fontWeight:600,wordBreak:"break-word"}}>{v}</div>
-            </div>
+            <label key={l}>{l}<input value={v} readOnly/></label>
           ))}
         </div>
       </div>
