@@ -1,0 +1,1 @@
+'SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",PersonalEvent:"👤",TemplateEvent:"📋",Offer:"🏷",PixelPass:"🎫"};\nfunction fmtItemDate(value){if(!value)'

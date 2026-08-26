@@ -112,6 +112,7 @@ const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
 const SALE_LOCATIONS=["Lottery","CardRoulette","PersonalEvent","TemplateEvent","Offer","PixelPass"];
 const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",PersonalEvent:"Personal Event",TemplateEvent:"Template Event",Offer:"Offer",PixelPass:"Pixel Pass"};
 const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",PersonalEvent:"👤",TemplateEvent:"📋",Offer:"🏷",PixelPass:"🎫"};
+const RARITY_META={Common:{label:"Обычная",color:T2},Rare:{label:"Редкая",color:"#62a7e8"},Epic:{label:"Эпическая",color:"#8f83e8"},Legendary:{label:"Легендарная",color:"#e8b26b"},Mythic:{label:"Мифическая",color:"#e77c91"}};
 function fmtItemDate(value){if(!value)return "—";const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"})}
 
 function Icon({type,color="#fff",sz=15}){
@@ -283,26 +284,32 @@ function ItemImage({src,size=48}){
 }
 
 function ItemCard({item,onOpen}){
+  const rarity=RARITY_META[item.rarity];
   return (
-    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:STRIPE,border:`1px solid ${BRD}`,borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8,cursor:"pointer",width:220,flexShrink:0,userSelect:"none"}}>
-      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-        <ItemImage src={item.icon}/>
+    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:STRIPE,border:`1px solid ${BRD}`,borderRadius:12,padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
+      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+        <ItemImage src={item.icon} size={52}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:800,color:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name||"Без названия"}</div>
-          {item.tier&&<span style={{display:"inline-block",marginTop:3,padding:"1px 8px",borderRadius:20,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:700}}>{item.tier}</span>}
+          <div style={{fontSize:14,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:6}}>{item.name||"Без названия"}</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:10,fontWeight:700,color:T1,textTransform:"uppercase",letterSpacing:.3}}><span style={{width:6,height:6,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
+            {item.tier&&<span style={{padding:"3px 9px",borderRadius:20,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:800}}>{item.tier}</span>}
+          </div>
         </div>
       </div>
-      <div style={{fontSize:11,color:T2,display:"flex",flexDirection:"column",gap:2}}>
-        <div>id: {item.id||"—"}</div>
-        <div>parts: {item.parts||"none"}</div>
-        <div style={{display:"flex",alignItems:"center",gap:5}}>last sale: {fmtItemDate(item.lastSale)}{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>
+      <div style={{fontSize:11,color:T2,display:"flex",flexDirection:"column",gap:3}}>
+        <div>id: <span style={{color:T1}}>{item.id||"—"}</span></div>
+        <div>parts: <span style={{color:T1}}>{item.parts||"none"}</span></div>
+        {item.lastSale&&<div style={{display:"flex",alignItems:"center",gap:5}}>last sale: <span style={{color:T1}}>{fmtItemDate(item.lastSale)}</span>{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12,opacity:.85}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>}
       </div>
     </div>
   );
 }
 
 function ItemDetail({item,onClose}){
-  const rows=[["ID",item.id||"—"],["Parts",item.parts||"none"],["Tag",item.tag||"—"],["Type",item.type||"—"],["Rarity",item.rarity||"—"],["Setting",item.setting||"—"],["Tier",item.tier||"—"],["Last sale",fmtItemDate(item.lastSale)],["Sale location",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"]];
+  const rarity=RARITY_META[item.rarity];
+  const rows=[["ID",item.id||"—"],["Parts",item.parts||"none"],["Tag",item.tag||"—"],["Type",item.type||"—"],["Rarity",rarity?rarity.label:(item.rarity||"—")],["Setting",item.setting||"—"],["Tier",item.tier||"—"]];
+  if(item.lastSale){rows.push(["Last sale",fmtItemDate(item.lastSale)]);rows.push(["Sale location",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
     <div style={{position:"absolute",inset:0,zIndex:50,background:BG,borderRadius:16,display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <ZzzHeader onBack={onClose} title={item.name||"Предмет"}/>
@@ -360,10 +367,10 @@ function ContentPicker({items=[]}){
     <div style={{position:"relative"}}>
       {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)}/>}
       <div style={{display:"flex",gap:8,marginBottom:14}}>
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:10,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
-        <button style={{padding:"10px 22px",background:A,color:"#000",border:"none",borderRadius:10,fontWeight:800,fontFamily:ZZZ,fontStyle:"italic",cursor:"pointer",fontSize:13,flexShrink:0}}>Поиск</button>
-        <button onClick={()=>setShowFilters(v=>!v)} style={{width:44,flexShrink:0,background:showFilters?A:"transparent",border:`1.5px solid ${showFilters?A:BRD}`,borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke={showFilters?"#000":T1} strokeWidth="2" strokeLinecap="round"/></svg>
+        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        <button className="primary-action">Поиск</button>
+        <button className={showFilters?"primary-action":"ghost-action"} onClick={()=>setShowFilters(v=>!v)} style={{width:38,padding:0}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke={showFilters?"#292929":T1} strokeWidth="2" strokeLinecap="round"/></svg>
         </button>
       </div>
       <div style={{display:"flex",gap:14}}>
@@ -372,7 +379,7 @@ function ContentPicker({items=[]}){
           {filtered.map(it=><ItemCard key={it.uid} item={it} onOpen={setOpenItem}/>)}
         </div>
         {showFilters&&(
-          <div style={{width:200,flexShrink:0,background:STRIPE,border:`1px solid ${BRD}`,borderRadius:14,padding:14,maxHeight:520,overflowY:"auto"}}>
+          <div style={{width:200,flexShrink:0,background:STRIPE,border:`1px solid ${BRD}`,borderRadius:2,padding:14,maxHeight:520,overflowY:"auto"}}>
             <FilterGroup title="тип предмета" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
             <FilterGroup title="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
             {settingsPool.length>0&&<FilterGroup title="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)}/>}
