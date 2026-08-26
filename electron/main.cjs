@@ -12,6 +12,9 @@ const storeKeys=new Set(["navigation","workspace","notes","calendar"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
+const jiraEmail="d.krasnitsky@cubicgames.com";
+const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
+const jiraAuth=Buffer.from(`${jiraEmail}:${jiraToken}`).toString("base64");
 
 function googleCredentialsPath(){return path.join(app.getPath("userData"),"google-oauth.json")}
 function googleTokenPath(){return path.join(app.getPath("userData"),"google-token.dat")}
@@ -203,7 +206,7 @@ const mime = {".html":"text/html; charset=utf-8",".js":"text/javascript; charset
 
 function proxyJira(req,res){
   const targetPath=req.url.replace(/^\/jira-api/,"");
-  const upstream=https.request({hostname:"cubicgamesstudio.atlassian.net",path:targetPath,method:req.method,headers:{...req.headers,host:"cubicgamesstudio.atlassian.net",origin:"https://cubicgamesstudio.atlassian.net",referer:"https://cubicgamesstudio.atlassian.net/"}},up=>{
+  const upstream=https.request({hostname:"cubicgamesstudio.atlassian.net",path:targetPath,method:req.method,headers:{...req.headers,host:"cubicgamesstudio.atlassian.net",origin:"https://cubicgamesstudio.atlassian.net",referer:"https://cubicgamesstudio.atlassian.net/",authorization:`Basic ${jiraAuth}`}},up=>{
     res.writeHead(up.statusCode||500,{...up.headers,"access-control-allow-origin":"*"});up.pipe(res);
   });
   upstream.on("error",error=>{res.writeHead(502,{"content-type":"application/json"});res.end(JSON.stringify({error:error.message}));});

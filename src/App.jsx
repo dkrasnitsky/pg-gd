@@ -12,392 +12,18 @@ const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a
 const STRIPE=`repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(195,216,197,0.04) 4px,rgba(195,216,197,0.04) 5px),#303330`;
 const ZZZ="'ZZZBold','Integral CF',Impact,sans-serif";
 
-const JIRA_EMAIL="d.krasnitsky@cubicgames.com";
-const JIRA_TOKEN="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
 const JIRA_FILTER="19197";
 const JIRA_BASE="https://cubicgamesstudio.atlassian.net";
 const SHEETS_URL="https://docs.google.com/spreadsheets/d/1fGQnW1s9ueyhNxU7G2edY5hljQNUpKPZtRn_Qn-KsYM/edit?gid=1388976908#gid=1388976908";
-const GCAL_CLIENT_ID="843756905806-bm9uvc9esj6bvifjkfmp45fchp9d8e0m.apps.googleusercontent.com";
-const GCAL_SCOPES="https://www.googleapis.com/auth/calendar.readonly";
-
-/* ─── Google OAuth helper ─── */
-function useGoogleAuth(){
-  const [token,setToken]=useState(()=>sessionStorage.getItem("gcal_token")||null);
-  const [ready,setReady]=useState(false);
-  const clientRef=useRef(null);
-
-  useEffect(()=>{
-    const script=document.createElement("script");
-    script.src="https://accounts.google.com/gsi/client";
-    script.async=true;
-    script.onload=()=>{
-      clientRef.current=window.google.accounts.oauth2.initTokenClient({
-        client_id:GCAL_CLIENT_ID,
-        scope:GCAL_SCOPES,
-        callback:(resp)=>{
-          if(resp.access_token){
-            setToken(resp.access_token);
-            sessionStorage.setItem("gcal_token",resp.access_token);
-          }
-        },
-      });
-      setReady(true);
-    };
-    document.head.appendChild(script);
-    return()=>{try{document.head.removeChild(script)}catch(e){}};
-  },[]);
-
-  const signIn=useCallback(()=>{if(clientRef.current)clientRef.current.requestAccessToken()},[]);
-  const signOut=useCallback(()=>{setToken(null);sessionStorage.removeItem("gcal_token")},[]);
-
-  return {token,ready,signIn,signOut};
-}
-
-
-/* ─── Mini Calendar (left panel) ─── */
-function MiniCal({current,onSelect}){
-  const [viewDate,setViewDate]=useState(()=>new Date(current));
-  const y=viewDate.getFullYear(),m=viewDate.getMonth();
-  const first=new Date(y,m,1);
-  const startDay=first.getDay();
-  const daysInMonth=new Date(y,m+1,0).getDate();
-  const prevDays=new Date(y,m,0).getDate();
-  const cells=[];
-  for(let i=0;i<startDay;i++)cells.push({d:prevDays-startDay+1+i,out:true});
-  for(let i=1;i<=daysInMonth;i++)cells.push({d:i,out:false});
-  const rem=7-cells.length%7;
-  if(rem<7)for(let i=1;i<=rem;i++)cells.push({d:i,out:true});
-  const today=new Date();today.setHours(0,0,0,0);
-  const monLabel=viewDate.toLocaleDateString("en-US",{month:"long",year:"numeric"});
-
-  return (
-    <div style={{padding:"12px 14px"}}>
-      <div style={{display:"flex",alignItems:"center",marginBottom:10}}>
-        <div style={{fontSize:13,fontWeight:700,color:T1,flex:1}}>{monLabel}</div>
-        <div onClick={()=>setViewDate(new Date(y,m-1,1))} style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke={T1} strokeWidth="2" strokeLinecap="round"/></svg>
-        </div>
-        <div onClick={()=>setViewDate(new Date(y,m+1,1))} style={{width:24,height:24,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={T1} strokeWidth="2" strokeLinecap="round"/></svg>
-        </div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:1,textAlign:"center"}}>
-        {["S","M","T","W","T","F","S"].map((d,i)=>(
-          <div key={i} style={{fontSize:10,color:T2,fontWeight:600,padding:"4px 0"}}>{d}</div>
-        ))}
-        {cells.map((c,i)=>{
-          const cellDate=c.out?null:new Date(y,m,c.d);
-          const isToday=cellDate&&cellDate.getTime()===today.getTime();
-          return (
-            <div key={i}
-              onClick={()=>{if(cellDate)onSelect(cellDate)}}
-              style={{fontSize:11,borderRadius:"50%",cursor:c.out?"default":"pointer",color:c.out?"#333":isToday?BG:T1,background:isToday?A:"transparent",fontWeight:isToday?800:400,transition:"background .15s",width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto"}}
-              onMouseEnter={e=>{if(!c.out&&!isToday)e.currentTarget.style.background="rgba(255,255,255,0.08)"}}
-              onMouseLeave={e=>{if(!c.out&&!isToday)e.currentTarget.style.background="transparent"}}>
-              {c.d}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Layout overlapping events side-by-side ─── */
-function layoutEvents(dayEvents,getEventPos){
-  const items=dayEvents.filter(e=>e.start?.dateTime).map(e=>({ev:e,...getEventPos(e)}));
-  items.sort((a,b)=>a.top-b.top||b.height-a.height);
-  const columns=[];
-  items.forEach(item=>{
-    let placed=false;
-    for(let c=0;c<columns.length;c++){
-      const last=columns[c][columns[c].length-1];
-      if(item.top>=last.top+last.height){columns[c].push(item);item.col=c;placed=true;break}
-    }
-    if(!placed){item.col=columns.length;columns.push([item])}
-  });
-  const totalCols=columns.length;
-  items.forEach(item=>{item.totalCols=totalCols});
-  return items;
-}
-
-/* ─── Calendar Component ─── */
-function CalendarTab(){
-  const {token,ready,signIn,signOut}=useGoogleAuth();
-  const [events,setEvents]=useState([]);
-  const [loading,setLoading]=useState(false);
-  const [err,setErr]=useState(null);
-  const [weekOff,setWeekOff]=useState(0);
-  const [selEvent,setSelEvent]=useState(null);
-  const [nowMin,setNowMin]=useState(()=>{const n=new Date();return n.getHours()*60+n.getMinutes()});
-
-  useEffect(()=>{
-    const iv=setInterval(()=>{const n=new Date();setNowMin(n.getHours()*60+n.getMinutes())},60000);
-    return()=>clearInterval(iv);
-  },[]);
-
-  const getWeekDays=useCallback(()=>{
-    const now=new Date();
-    now.setDate(now.getDate()+weekOff*7);
-    const day=now.getDay();
-    const mon=new Date(now);
-    mon.setDate(now.getDate()-(day===0?6:day-1));
-    mon.setHours(0,0,0,0);
-    const days=[];
-    for(let i=0;i<5;i++){const d=new Date(mon);d.setDate(mon.getDate()+i);days.push(d)}
-    return days;
-  },[weekOff]);
-
-  const days=useMemo(()=>getWeekDays(),[getWeekDays]);
-  const weekStart=days[0];
-  const weekEnd=new Date(days[4]);weekEnd.setHours(23,59,59,999);
-
-  useEffect(()=>{
-    if(!token)return;
-    setLoading(true);setErr(null);
-    fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${weekStart.toISOString()}&timeMax=${weekEnd.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=100`,{
-      headers:{"Authorization":`Bearer ${token}`}
-    })
-      .then(r=>{
-        if(r.status===401){signOut();throw new Error("Token expired — sign in again")}
-        if(!r.ok)throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then(d=>{setEvents(d.items||[]);setLoading(false)})
-      .catch(e=>{setErr(e.message);setLoading(false)});
-  },[token,weekOff]);
-
-  const START_H=10,END_H=20,HOUR_H=68;
-  const hours=[];for(let h=START_H;h<=END_H;h++)hours.push(h);
-  const GRID_H=HOUR_H*(END_H-START_H);
-  const DAY_NAMES=["Mon","Tue","Wed","Thu","Fri"];
-  const today=new Date();today.setHours(0,0,0,0);
-  const isThisWeek=weekOff===0;
-  const nowTop=((nowMin-START_H*60)/60)*HOUR_H;
-  const showNowLine=isThisWeek&&nowMin>=START_H*60&&nowMin<=END_H*60;
-
-  const getEventsForDay=(dayDate)=>{
-    const y=dayDate.getFullYear(),mo=dayDate.getMonth(),da=dayDate.getDate();
-    return events.filter(e=>{
-      const s=new Date(e.start?.dateTime||e.start?.date);
-      return s.getFullYear()===y&&s.getMonth()===mo&&s.getDate()===da;
-    });
-  };
-
-  const getEventPos=(e)=>{
-    const s=new Date(e.start?.dateTime);
-    const en=new Date(e.end?.dateTime);
-    const startMin=Math.max(s.getHours()*60+s.getMinutes(),START_H*60);
-    const endMin=Math.min(en.getHours()*60+en.getMinutes(),END_H*60);
-    return {top:((startMin-START_H*60)/60)*HOUR_H,height:Math.max(((endMin-startMin)/60)*HOUR_H-2,22)};
-  };
-
-  const getEventColor=(e)=>{
-    const h=new Date(e.start?.dateTime).getHours();
-    if(h<14)return{bg:"#E85D75",bgFade:"rgba(232,93,117,0.18)",border:"#E85D75",text:"#fff",textFade:"#E85D75"};
-    if(h<17)return{bg:"#E8A85D",bgFade:"rgba(232,168,93,0.18)",border:"#E8A85D",text:"#000",textFade:"#E8A85D"};
-    return{bg:"#5D8DE8",bgFade:"rgba(93,141,232,0.18)",border:"#5D8DE8",text:"#fff",textFade:"#5D8DE8"};
-  };
-
-  const isAccepted=(e)=>{
-    if(!e.attendees)return true;
-    const me=e.attendees.find(a=>a.self);
-    return !me||me.responseStatus==="accepted"||me.responseStatus==="tentative";
-  };
-
-  const fmtTime=(iso)=>{const d=new Date(iso);const h=d.getHours();const m=d.getMinutes();const ap=h>=12?"pm":"am";const h12=h%12||12;return m===0?`${h12}${ap}`:`${h12}:${String(m).padStart(2,"0")}${ap}`};
-  const fmtRange=(s,e)=>`${fmtTime(s)} - ${fmtTime(e)}`;
-
-  const navigateToDate=(date)=>{
-    const now=new Date();
-    const diff=Math.floor((date-now)/86400000);
-    setWeekOff(Math.floor(diff/7));
-    setSelEvent(null);
-  };
-
-  if(!token){
-    return (
-      <div className="calendar-page" style={{height:"100%",background:BG,borderRadius:16,border:`1px solid ${BRD}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
-        <div style={{fontSize:40,opacity:0.3}}>📅</div>
-        <div style={{fontSize:14,color:T1,fontWeight:600}}>Sign in to view your calendar</div>
-        <div style={{fontSize:11,color:T2,textAlign:"center",maxWidth:280,lineHeight:1.5}}>Sign in with your Google Workspace account to load events.</div>
-        <button onClick={signIn} disabled={!ready} style={{padding:"10px 24px",background:ready?A:"#333",color:ready?"#000":T2,border:"none",borderRadius:12,fontSize:13,fontWeight:800,fontFamily:ZZZ,fontStyle:"italic",cursor:ready?"pointer":"default"}}>
-          {ready?"Sign in with Google":"Loading..."}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="calendar-page" style={{height:"100%",background:BG,borderRadius:16,border:`1px solid ${BRD}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",padding:"10px 16px",gap:8,flexShrink:0}}>
-        <div style={{width:3,height:16,background:A,borderRadius:1}}/>
-        <div style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>Calendar</div>
-        {!isThisWeek&&<div onClick={()=>{setWeekOff(0);setSelEvent(null)}} style={{padding:"4px 10px",background:A,borderRadius:8,fontSize:10,fontWeight:800,color:"#000",cursor:"pointer",marginLeft:4}}>Today</div>}
-        <div style={{flex:1}}/>
-        <div onClick={signOut} style={{fontSize:9,color:"#555",cursor:"pointer"}}>Sign out</div>
-        <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer" style={{fontSize:9,color:"#555",textDecoration:"none"}}>Open ↗</a>
-      </div>
-
-      {loading&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:T2,fontSize:12}}>Loading...</span></div>}
-      {err&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}}><span style={{color:DNG,fontSize:12}}>{err}</span>{err.includes("expired")&&<button onClick={signIn} style={{padding:"6px 16px",background:A,color:"#000",border:"none",borderRadius:8,fontSize:11,fontWeight:800,cursor:"pointer"}}>Sign in again</button>}</div>}
-
-      {!loading&&!err&&(
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-
-          {/* ── Left panel ── */}
-          <div style={{width:260,flexShrink:0,borderRight:`1px solid ${BRD}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            <MiniCal current={days[0]} onSelect={navigateToDate}/>
-            <div style={{margin:"0 14px",height:1,background:BRD}}/>
-
-            {/* Week nav */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"10px 14px"}}>
-              <div onClick={()=>{setWeekOff(w=>w-1);setSelEvent(null)}} style={{width:28,height:28,background:"#1a1a22",border:`1.5px solid ${BRD}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"border-color .15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=A} onMouseLeave={e=>e.currentTarget.style.borderColor=BRD}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke={T1} strokeWidth="2" strokeLinecap="round"/></svg>
-              </div>
-              <div style={{fontSize:11,color:T2,fontWeight:600,minWidth:110,textAlign:"center"}}>
-                {days[0].toLocaleDateString("en-US",{month:"short",day:"numeric"})} — {days[4].toLocaleDateString("en-US",{month:"short",day:"numeric"})}
-              </div>
-              <div onClick={()=>{setWeekOff(w=>w+1);setSelEvent(null)}} style={{width:28,height:28,background:"#1a1a22",border:`1.5px solid ${BRD}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"border-color .15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=A} onMouseLeave={e=>e.currentTarget.style.borderColor=BRD}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={T1} strokeWidth="2" strokeLinecap="round"/></svg>
-              </div>
-            </div>
-
-            <div style={{margin:"0 14px",height:1,background:BRD}}/>
-
-            {/* Event detail */}
-            <div style={{flex:1,overflowY:"auto"}}>
-              {selEvent?(
-                <div style={{padding:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12}}>
-                    <div style={{width:3,height:14,background:A,borderRadius:1}}/>
-                    <div style={{fontSize:11,fontWeight:800,fontFamily:ZZZ,color:T1,textTransform:"uppercase",letterSpacing:0.5,flex:1}}>Event</div>
-                    <div onClick={()=>setSelEvent(null)} style={{width:22,height:22,background:BRD,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                      <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke={T1} strokeWidth="1.5" strokeLinecap="round"/></svg>
-                    </div>
-                  </div>
-                  <div style={{fontSize:16,fontWeight:800,color:T1,marginBottom:8,lineHeight:1.3}}>{selEvent.summary||"(no title)"}</div>
-                  <div style={{fontSize:12,color:T2,marginBottom:6}}>
-                    {selEvent.start?.dateTime&&<>
-                      <span style={{color:A,fontWeight:600}}>{new Date(selEvent.start.dateTime).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</span>
-                      <br/>{fmtTime(selEvent.start.dateTime)} – {fmtTime(selEvent.end.dateTime)}
-                    </>}
-                    {selEvent.start?.date&&!selEvent.start?.dateTime&&<span style={{color:A,fontWeight:600}}>All day</span>}
-                  </div>
-                  {!isAccepted(selEvent)&&<div style={{fontSize:10,color:DNG,fontWeight:600,marginBottom:6,padding:"3px 8px",background:"rgba(255,68,68,0.1)",borderRadius:6,display:"inline-block"}}>Not accepted</div>}
-                  {selEvent.location&&<div style={{fontSize:11,color:T2,marginBottom:6}}>📍 {selEvent.location}</div>}
-                  {selEvent.hangoutLink&&<a href={selEvent.hangoutLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginBottom:10,padding:"6px 14px",background:A,color:"#000",borderRadius:8,fontSize:12,fontWeight:800,textDecoration:"none"}}>Join Meet ↗</a>}
-                  {selEvent.conferenceData?.entryPoints?.map((ep,i)=>(
-                    ep.entryPointType==="video"&&!selEvent.hangoutLink&&<a key={i} href={ep.uri} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginBottom:10,padding:"6px 14px",background:A,color:"#000",borderRadius:8,fontSize:12,fontWeight:800,textDecoration:"none"}}>{ep.label||"Join call"} ↗</a>
-                  ))}
-                  {selEvent.description&&<div style={{fontSize:11,color:T2,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word",borderTop:`1px solid ${BRD}`,paddingTop:10,marginTop:6}} dangerouslySetInnerHTML={{__html:selEvent.description}}/>}
-                  {selEvent.attendees&&selEvent.attendees.length>0&&(
-                    <div style={{marginTop:10,borderTop:`1px solid ${BRD}`,paddingTop:10}}>
-                      <div style={{fontSize:9,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:600,marginBottom:6}}>Attendees</div>
-                      {selEvent.attendees.map((a,i)=>(
-                        <div key={i} style={{fontSize:11,color:a.responseStatus==="accepted"?"#22C55E":a.responseStatus==="declined"?DNG:T2,marginBottom:3}}>
-                          {a.displayName||a.email} {a.organizer&&<span style={{fontSize:9,color:A}}>org</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {selEvent.htmlLink&&<a href={selEvent.htmlLink} target="_blank" rel="noopener noreferrer" style={{display:"inline-block",marginTop:10,fontSize:10,color:"#555",textDecoration:"none"}}>Open in Google Calendar ↗</a>}
-                </div>
-              ):(
-                <div style={{padding:"30px 14px",textAlign:"center",color:"#333",fontSize:11}}>Select an event to view details</div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Week grid ── */}
-          <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-            {/* Time gutter */}
-            <div style={{width:48,flexShrink:0,borderRight:`1px solid ${BRD}`,display:"flex",flexDirection:"column"}}>
-              <div style={{height:40,flexShrink:0}}/>
-              <div style={{position:"relative",height:GRID_H}}>
-                {hours.map((h,i)=>(
-                  <div key={h} style={{position:"absolute",top:i*HOUR_H,right:8}}>
-                    <span style={{fontSize:11,color:T2,lineHeight:1}}>{String(h).padStart(2,"0")}.00</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Day columns */}
-            {days.map((d,di)=>{
-              const isToday=d.getTime()===today.getTime();
-              const dayEvents=getEventsForDay(d);
-              const laid=layoutEvents(dayEvents,getEventPos);
-              return (
-                <div key={di} style={{flex:1,borderRight:di<4?"1px solid rgba(58,58,68,0.4)":"none",minWidth:0,display:"flex",flexDirection:"column"}}>
-                  {/* Day header */}
-                  <div style={{height:40,display:"flex",alignItems:"center",justifyContent:"center",borderBottom:`1px solid ${BRD}`,flexShrink:0}}>
-                    <span style={{fontSize:12,color:isToday?A:T2,fontWeight:600,marginRight:5}}>{DAY_NAMES[di]}</span>
-                    <span style={{fontSize:15,fontWeight:800,color:isToday?"#000":T1,background:isToday?A:"transparent",width:28,height:28,borderRadius:"50%",display:"inline-flex",alignItems:"center",justifyContent:"center"}}>{d.getDate()}</span>
-                  </div>
-
-                  {/* Grid area */}
-                  <div style={{position:"relative",height:GRID_H}}>
-                    {/* Hour lines */}
-                    {hours.map((h,i)=>(
-                      <div key={h} style={{position:"absolute",top:i*HOUR_H,left:0,right:0,borderTop:"1px solid rgba(58,58,68,0.15)"}}/>
-                    ))}
-
-                    {/* Now line */}
-                    {showNowLine&&isToday&&(
-                      <div style={{position:"absolute",top:nowTop,left:-1,right:-1,zIndex:20,pointerEvents:"none",display:"flex",alignItems:"center"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:A,flexShrink:0,marginLeft:-5}}/>
-                        <div style={{flex:1,height:2,background:A}}/>
-                      </div>
-                    )}
-
-                    {/* Events (side-by-side) */}
-                    {laid.map((item,ei)=>{
-                      const ev=item.ev;
-                      const clr=getEventColor(ev);
-                      const accepted=isAccepted(ev);
-                      const sel=selEvent?.id===ev.id;
-                      const colW=100/item.totalCols;
-                      const leftPct=item.col*colW;
-                      return (
-                        <div key={ev.id||ei} onClick={()=>setSelEvent(sel?null:ev)}
-                          style={{position:"absolute",top:item.top,left:`calc(${leftPct}% + 2px)`,width:`calc(${colW}% - 4px)`,height:item.height,
-                            background:accepted?(sel?clr.bg:clr.bgFade):"transparent",
-                            border:accepted?`1.5px solid ${sel?clr.bg:clr.border}`:`1.5px dashed ${clr.border}`,
-                            borderRadius:6,padding:"3px 6px",overflow:"hidden",cursor:"pointer",
-                            transition:"all .15s",zIndex:sel?5:1}}>
-                          <div style={{fontSize:11,fontWeight:700,color:sel&&accepted?clr.text:clr.textFade,lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ev.summary||"(no title)"}</div>
-                          {item.height>30&&<div style={{fontSize:9,color:sel&&accepted?clr.text:T2,marginTop:1}}>{fmtRange(ev.start.dateTime,ev.end.dateTime)}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {/* Bottom stripe */}
-      <div style={{height:12,flexShrink:0,background:`repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(255,255,255,0.04) 3px,rgba(255,255,255,0.04) 6px)`,borderTop:`1px solid ${BRD}`}}/>
-    </div>
-  );
-}
-
 const SC={"To Do":"#3B82F6","In Progress":"#F59E0B","Done":"#22C55E","к выполнению":"#3B82F6","К выполнению":"#3B82F6","В работе":"#F59E0B","Готово":"#22C55E","Reopened":"#3B82F6","QA Verified":"#4faf72","Merged":"#4faf72","Need More Info":"#F59E0B","On Hold":"#6B7280","Ready to Testing":"#8B5CF6","В процессе проверки":"#8B5CF6","In Testing":"#8B5CF6","Открыто повторно":"#3B82F6","Закрыто":"#22C55E","Ready to Merge":"#4faf72"};
 const SEN={"к выполнению":"TO DO","К выполнению":"TO DO","В работе":"IN PROGRESS","Готово":"DONE","Открыто повторно":"REOPENED","В процессе проверки":"READY TO TESTING","Закрыто":"CLOSED"};
 const TODO_S=["к выполнению","К выполнению","reopened","открыто повторно"];
 const DONE_S=["готово","qa verified","merged","закрыто","ready to merge"];
 const ACTIVE_S=["в работе","in testing","в процессе проверки"];
 const S_ORDER={"В работе":0,"к выполнению":1,"Reopened":1,"Открыто повторно":1,"QA Verified":2,"Merged":2,"Ready to Merge":2,"В процессе проверки":2,"In Testing":2,"Готово":3,"Закрыто":3};
-const NO_IFRAME=["tableau.lightmap.com","appsheet.com","claude.ai","notion.so","figma.com","translate.yandex.ru","gitlab.lightmap.com","atlassian.net"];
 
 function sDisp(s){return (SEN[s]||s||"").toUpperCase()}
 function sClr(s){return SC[s]||"#6B7280"}
-function canEmbed(url){try{const h=new URL(url).hostname;return !NO_IFRAME.some(d=>h.includes(d))}catch(e){return false}}
-function proxyUrl(url){try{const u=new URL(url);if(u.hostname.includes("atlassian.net"))return "/jira-api"+u.pathname+u.search+u.hash;return url}catch(e){return url}}
-function getGreeting(){const h=new Date().getHours();if(h<6)return "Good night";if(h<13)return "Good morning";if(h<18)return "Good afternoon";return "Good evening"}
 
 function ParseDesc({text}){
   if(!text) return <span style={{color:T2,fontStyle:"italic"}}>No description — click to add</span>;
@@ -412,13 +38,6 @@ function ParseDesc({text}){
   if(last<text.length) parts.push(<span key="end">{text.slice(last)}</span>);
   return parts.length>0 ? <>{parts}</> : <span>{text}</span>;
 }
-
-const MIRO_BOARDS=[
-  {name:"GameOffer Resources",url:"https://miro.com/app/live-embed/uXjVPsBJW2c=/?moveToViewport=4380,-7022,6509,3112&embedId=73948711755",desc:"Ресурсы для офферов"},
-  {name:"PG3D Items",url:"https://miro.com/app/live-embed/o9J_lr2kApE=/?moveToViewport=672,-7901,5424,2594&embedId=408374462174",desc:"База итемов с картинками"},
-  {name:"Dmitriy Krasnitskiy",url:"https://miro.com/app/live-embed/uXjVNThhVxM=/?moveToViewport=20751,-20245,36951,17671&embedId=617913335258",desc:"Личная доска"},
-  {name:"Monetization - Planning",url:"https://miro.com/app/live-embed/uXjVNbbbAtA=/?moveToViewport=-181228,-70904,391196,187084&embedId=959101288117",desc:"Концепты лайв-опс активностей"},
-];
 
 const CONFIGS=[
   {name:"Trader Van",icon:"/icons/trader-van.png",url:"https://docs.google.com/spreadsheets/d/1qKogyjkoHpO6imV1aU5ZyWKpFuF9Hr_qPYyc8RpamfE/edit?pli=1&gid=1806543965#gid=1806543965"},
@@ -493,75 +112,9 @@ function Icon({type,color="#fff",sz=15}){
   return <svg width={sz} height={sz} viewBox="0 0 24 24" fill={["up","down","back"].includes(type)?"none":color}>{p[type]}</svg>;
 }
 
-function NavBar({tab,setTab}){
-  const tabs=["home","tasks","config","boards","tools"];
-  return (
-    <div style={{position:"absolute",top:0,right:0,height:48,background:BG,borderRadius:12,zIndex:10,display:"flex",alignItems:"center",gap:6,padding:"0 10px"}}>
-      {tabs.map((t,i)=>(
-        <div key={t} onClick={()=>setTab(i)} style={{width:36,height:36,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
-          <Icon type={t} color={tab===i?A:"#fff"} sz={15}/>
-          {tab===i && <div style={{position:"absolute",top:3,right:3,width:6,height:6,background:A,borderRadius:"50%"}}/>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /* ─── Tab icon mapping ─── */
 const TAB_ICON_MAP={"Trader Van":"\u26DF","LootBoxes":"\uD83D\uDDC3","Offers":"$","Localization":"\u53CB","Lottery":"\uD83C\uDF9F","Balance":"\u2696\uFE0E","Event Center":"\uD83D\uDDD3","Card Roulette":"\uD83C\uDCB1","Main Store":"\u26C1","Attributes":"\uD83C\uDF9A","Pers. Events":"\u2254","Temp. Events":"\u2611","AB Test":"\uD83D\uDDA7","Exp Open":"\u2191","Map List":"\uD83D\uDDFA","Clan War":"\u26E8","ADS Roulette":"\uD83C\uDF9E","Clan Chests":"\uD83D\uDF32","GameModeHub":"\uD800\uDC51","Tournament":"\uD83C\uDF96","Bots":"\u23FB","Rotation":"\u21BB","Tableau":"\uD83D\uDCCA","PG3D.Admin":"\uBAA8","Appsheet":"\uD83D\uDCF1","GitLab":"\uD83E\uDDEA","Claude":"\uD83E\uDD16","Content Sheet":"\u229E","Calculator":"\u00F7","Configs Archive":"\uD83D\uDDC1","Aghanim":"A","Content Plan":"\uD83D\uDDD0","Notion":"\u2712","Translator":"\uD83C\uDF10","Figma":"\u25B2","Confluence":"\uD83D\uDCD6","GameOffer Resources":"\u270E","PG3D Items":"\u270E","Dmitriy Krasnitskiy":"\u270E","Monetization - Planning":"\u270E"};
 function getTabIcon(title){return TAB_ICON_MAP[title]||"\uD83D\uDCC4"}
-
-/* ─── Browser Tabs (horizontal pills, bottom center) ─── */
-function BrowserTabs({tabs,activeId,showBrowser,onSelect,onClose}){
-  const [hovered,setHovered]=useState(null);
-  const containerRef=useRef(null);
-  const tabRefs=useRef({});
-  const [blob,setBlob]=useState({left:0,width:0});
-  const [ready,setReady]=useState(false);
-
-  const updateBlob=useCallback(()=>{
-    const aId=showBrowser?activeId:null;
-    const el=aId!=null?tabRefs.current[aId]:null;
-    const container=containerRef.current;
-    if(!el||!container)return;
-    const cr=container.getBoundingClientRect();
-    const er=el.getBoundingClientRect();
-    setBlob({left:er.left-cr.left,width:er.width});
-    if(!ready)setReady(true);
-  },[tabs,activeId,showBrowser,ready]);
-
-  useEffect(()=>{updateBlob()},[updateBlob]);
-  useEffect(()=>{const t=setTimeout(updateBlob,60);return()=>clearTimeout(t)},[tabs.length,activeId]);
-
-  if(tabs.length===0)return null;
-
-  const hasActive=showBrowser&&tabs.some(t=>t.id===activeId);
-
-  return (
-    <div style={{position:"absolute",bottom:0,left:0,right:0,height:50,zIndex:60,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div ref={containerRef} style={{display:"flex",alignItems:"center",gap:8,position:"relative"}}>
-        {hasActive&&<div style={{position:"absolute",top:0,left:blob.left,width:blob.width,height:34,borderRadius:20,background:A,transition:ready?"left 0.3s cubic-bezier(0.4,0,0.2,1),width 0.3s cubic-bezier(0.4,0,0.2,1)":"none",zIndex:0}}/>}
-        {tabs.map((t)=>{
-          const on=showBrowser&&t.id===activeId;
-          const isHov=hovered===t.id;
-          return (
-            <div key={t.id} ref={el=>{if(el)tabRefs.current[t.id]=el}}
-              onClick={()=>onSelect(t.id)}
-              onMouseEnter={()=>setHovered(t.id)} onMouseLeave={()=>setHovered(null)}
-              style={{height:34,padding:"0 16px",borderRadius:20,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",background:on?"transparent":"#A2A2A2",transition:"background 0.25s,transform 0.15s",transform:isHov?"scale(1.04)":"scale(1)",zIndex:1}}>
-              <span style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,fontStyle:"italic",color:on?"#000":"#131416",letterSpacing:0.5,whiteSpace:"nowrap",transition:"color 0.2s"}}>{t.title.toUpperCase()}</span>
-              {isHov&&(
-                <div onClick={(e)=>{e.stopPropagation();onClose(t.id)}} style={{position:"absolute",top:-6,right:-6,width:18,height:18,background:"#fff",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                  <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke="#000" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function Sidebar({section,setSection,total}){
   if(typeof window!=="undefined"&&window.__PG3D_DESKTOP_SHELL__)return null;
@@ -597,7 +150,7 @@ function ZzzHeader({onBack,onMinimize,title,rightLabel,rightUrl}){
 
 function TaskDetail({taskKey,onClose}){
   const [data,setData]=useState(null);const [trans,setTrans]=useState([]);const [loading,setLoading]=useState(true);const [comment,setComment]=useState("");const [posting,setPosting]=useState(false);const [editDesc,setEditDesc]=useState(false);const [descDraft,setDescDraft]=useState("");const [saving,setSaving]=useState(false);
-  const auth=btoa(`${JIRA_EMAIL}:${JIRA_TOKEN}`);const hdrs={"Authorization":`Basic ${auth}`,"Accept":"application/json"};const hdrsJ={...hdrs,"Content-Type":"application/json","X-Atlassian-Token":"no-check"};
+  const hdrs={"Accept":"application/json"};const hdrsJ={...hdrs,"Content-Type":"application/json","X-Atlassian-Token":"no-check"};
   const load=()=>{setLoading(true);Promise.all([fetch(`/jira-api/rest/api/2/issue/${taskKey}?fields=summary,description,status,priority,assignee,reporter,parent,duedate,fixVersions,comment`,{headers:hdrs}).then(r=>r.json()),fetch(`/jira-api/rest/api/2/issue/${taskKey}/transitions`,{headers:hdrs}).then(r=>r.json())]).then(([issue,tr])=>{setData(issue);setTrans(tr.transitions||[]);setLoading(false);setEditDesc(false)})};
   useEffect(()=>{load()},[taskKey]);
   const doTrans=(id)=>{setSaving(true);fetch(`/jira-api/rest/api/2/issue/${taskKey}/transitions`,{method:"POST",headers:hdrsJ,body:JSON.stringify({transition:{id:String(id)}})}).then(r=>{if(!r.ok)return r.text().then(t=>{alert("Failed: "+t);setSaving(false)});setSaving(false);load()}).catch(e=>{alert(e.message);setSaving(false)})};
@@ -666,8 +219,7 @@ function GoogleSheetsView(){
 function TasksTab({openIn,activeSection=0}){
   const [section,setSection]=useState(activeSection);const [tasks,setTasks]=useState([]);const [loading,setLoading]=useState(true);const [err,setErr]=useState(null);const [sortBy,setSortBy]=useState(null);const [showSort,setShowSort]=useState(false);const [selTask,setSelTask]=useState(null);
   useEffect(()=>setSection(activeSection),[activeSection]);
-  const auth=btoa(`${JIRA_EMAIL}:${JIRA_TOKEN}`);
-  const load=()=>{setLoading(true);fetch(`/jira-api/rest/api/2/search/jql?jql=filter=${JIRA_FILTER}&maxResults=50&fields=summary,status,priority,parent,duedate`,{headers:{"Authorization":`Basic ${auth}`,"Accept":"application/json"}}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{setTasks(d.issues||[]);setLoading(false)}).catch(e=>{setErr(e.message);setLoading(false)})};
+  const load=()=>{setLoading(true);fetch(`/jira-api/rest/api/2/search/jql?jql=filter=${JIRA_FILTER}&maxResults=50&fields=summary,status,priority,parent,duedate`,{headers:{"Accept":"application/json"}}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{setTasks(d.issues||[]);setLoading(false)}).catch(e=>{setErr(e.message);setLoading(false)})};
   useEffect(()=>{load()},[]);
   const sorted=useMemo(()=>{if(!sortBy)return tasks;const c=[...tasks];if(sortBy==="deadline")c.sort((a,b)=>(a.fields?.duedate||"9999").localeCompare(b.fields?.duedate||"9999"));if(sortBy==="status")c.sort((a,b)=>(S_ORDER[a.fields?.status?.name]??5)-(S_ORDER[b.fields?.status?.name]??5));return c},[tasks,sortBy]);
   if(section===1) return (<div style={{position:"relative",height:"100%"}}><Sidebar section={section} setSection={setSection} total={3}/><div style={{position:"absolute",left:54,top:0,right:0,bottom:0,borderRadius:16,overflow:"hidden",background:"#EFF0EF"}}><div style={{display:"flex",alignItems:"center",padding:"8px 14px",gap:8}}><div style={{width:3,height:16,background:A,borderRadius:1}}/><div style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,color:"#000",letterSpacing:1,textTransform:"uppercase"}}>Google Sheets</div></div><div style={{margin:"0 8px 8px",borderRadius:12,overflow:"hidden",height:"calc(100% - 44px)"}}><GoogleSheetsView/></div></div></div>);
@@ -716,51 +268,7 @@ function TasksTab({openIn,activeSection=0}){
   );
 }
 
-function InternalBrowser({url,title,onClose,onMinimize}){
-  const [failed,setFailed]=useState(false);
-  return (
-    <div style={{position:"absolute",inset:0,zIndex:50,borderRadius:16,overflow:"hidden",display:"flex",flexDirection:"column",background:BG}}>
-      <ZzzHeader onBack={onClose} onMinimize={onMinimize} title={title} rightLabel="Open in new tab" rightUrl={url}/>
-      <div style={{flex:1,background:"#fff",position:"relative"}}>
-        {failed ? <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",background:BG,gap:12}}><div style={{fontSize:14,color:T2}}>Can't embed this site</div><a href={url} target="_blank" rel="noopener noreferrer" style={{padding:"10px 20px",background:A,color:"#000",borderRadius:10,textDecoration:"none",fontWeight:800,fontSize:13}}>Open in new tab ↗</a></div>
-          : <iframe src={url} style={{width:"100%",height:"100%",border:"none"}} title={title} onError={()=>setFailed(true)}/>}
-      </div>
-    </div>
-  );
-}
 
-function LinkGrid({items,openIn}){
-  const isC=items===CONFIGS;
-  return (
-    <div style={{height:"100%",background:BG,borderRadius:16,border:`1px solid ${BRD}`,overflow:"hidden",display:"flex",flexDirection:"column",position:"relative"}}>
-      <style>{`.lbtn .fill{position:absolute;inset:0;background:${A};transform:scaleX(0);transform-origin:left;transition:transform .3s ease;z-index:0}.lbtn:hover .fill{transform:scaleX(1)}.lbtn:hover{border-color:${A}!important}.lbtn:hover .lt{color:#000!important}`}</style>
-      <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(255,255,255,0.01) 6px,rgba(255,255,255,0.01) 12px)",pointerEvents:"none",borderRadius:16}}/>
-      <div style={{position:"relative",zIndex:1,display:"flex",alignItems:"center",padding:"14px 20px 8px",gap:8}}><div style={{width:3,height:16,background:A,borderRadius:1}}/><div style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>{isC?"Configs":"Files"}</div><div style={{flex:1}}/><div style={{fontSize:9,color:"#555"}}>{items.length} shortcuts</div></div>
-      <div style={{position:"relative",zIndex:1,margin:"0 20px 12px",height:1,background:BRD}}/>
-      <div style={{position:"relative",zIndex:1,flex:1,overflowY:"auto",padding:"0 18px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",columnGap:16,rowGap:8,alignContent:"start"}}>
-        {items.map(c=>(<a key={c.name} href={c.url} onClick={e=>{e.preventDefault();if(canEmbed(c.url))openIn(proxyUrl(c.url),c.name);else window.open(c.url,"_blank")}} className="lbtn" style={{display:"flex",alignItems:"center",height:52,background:"#000",border:`2.5px solid ${BRD}`,borderRadius:28,overflow:"hidden",cursor:"pointer",transition:"border-color .2s",textDecoration:"none",position:"relative"}}>
-          <div className="fill"/><div style={{width:68,height:"100%",background:A,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,clipPath:"polygon(0 0,100% 0,78% 100%,0 100%)",position:"relative",zIndex:1}}>{c.icon.startsWith("/")?<img src={c.icon} alt="" style={{width:34,height:34,objectFit:"contain",filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.3))"}} onError={e=>{e.target.style.display="none";e.target.parentElement.textContent=c.name[0]}}/>:<span style={{fontSize:22}}>{c.icon}</span>}</div>
-          <span className="lt" style={{flex:1,padding:"0 16px",fontSize:15,fontWeight:900,fontFamily:ZZZ,fontStyle:"italic",color:T1,letterSpacing:0.5,position:"relative",zIndex:1,transition:"color .25s"}}>{c.name}</span>
-        </a>))}
-      </div>
-    </div>
-  );
-}
-
-function BoardsTab({openIn}){
-  return (
-    <div style={{height:"100%",background:BG,borderRadius:16,border:`1px solid ${BRD}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      <div style={{display:"flex",alignItems:"center",padding:"14px 20px 8px",gap:8}}><div style={{width:3,height:16,background:A,borderRadius:1}}/><div style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>Boards</div><div style={{flex:1}}/><div style={{fontSize:9,color:"#555"}}>{MIRO_BOARDS.length} Miro boards</div></div>
-      <div style={{margin:"0 20px 10px",height:1,background:BRD}}/>
-      <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,padding:"0 18px 14px",alignContent:"start"}}>
-        {MIRO_BOARDS.map((b,i)=>(<div key={i} onClick={()=>openIn(b.url,b.name)} onMouseEnter={e=>e.currentTarget.style.borderColor=A} onMouseLeave={e=>e.currentTarget.style.borderColor=BRD} style={{background:"#000",border:`2px solid ${BRD}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s",display:"flex",flexDirection:"column"}}>
-          <div style={{flex:1,minHeight:140,background:"#1a1a22",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}><div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(255,255,255,0.03) 19px,rgba(255,255,255,0.03) 20px),repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(255,255,255,0.03) 19px,rgba(255,255,255,0.03) 20px)"}}/><div style={{position:"relative",display:"flex",gap:4,flexWrap:"wrap",padding:10,alignContent:"flex-start"}}>{[A,"#ff6b6b","#4ecdc4","#a29bfe","#fdcb6e"].slice(0,3+i).map((c,j)=>(<div key={j} style={{width:24+j*4,height:18,background:c,borderRadius:2,opacity:0.7-j*0.08}}/>))}</div></div>
-          <div style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,color:T1,fontWeight:900,fontFamily:ZZZ,fontStyle:"italic"}}>{b.name}</span><span style={{fontSize:10,color:"#555"}}>· {b.desc}</span></div>
-        </div>))}
-      </div>
-    </div>
-  );
-}
 
 function OfferConstructor(){
   const [offers,setOffers]=useState([
@@ -910,78 +418,9 @@ function ToolsTab({initialTool="offers",hideSelector=false}){
   );
 }
 
-function LegacyDashboard(){
-  const [tab,setTab]=useState(0);
-  /* ── Browser tabs state ── */
-  const [browserTabs,setBrowserTabs]=useState([]);
-  const [activeTabId,setActiveTabId]=useState(null);
-  const [showBrowser,setShowBrowser]=useState(false);
-  const nextId=useRef(1);
-
-  const openIn=(url,title)=>{
-    const existing=browserTabs.find(t=>t.title===title);
-    if(existing){setActiveTabId(existing.id);setShowBrowser(true);return}
-    const id=nextId.current++;
-    setBrowserTabs(prev=>[...prev,{id,title,url}]);
-    setActiveTabId(id);
-    setShowBrowser(true);
-  };
-
-  const closeBrowser=()=>{
-    if(activeTabId!==null) setBrowserTabs(prev=>prev.filter(t=>t.id!==activeTabId));
-    setActiveTabId(null);
-    setShowBrowser(false);
-  };
-
-  const minimizeBrowser=()=>{setShowBrowser(false)};
-
-  const selectTab=(id)=>{setActiveTabId(id);setShowBrowser(true)};
-
-  const closeTab=(id)=>{
-    setBrowserTabs(prev=>prev.filter(t=>t.id!==id));
-    if(activeTabId===id){setActiveTabId(null);setShowBrowser(false)}
-  };
-
-  const activeTab=browserTabs.find(t=>t.id===activeTabId);
-
-  return (
-    <div style={{height:"100vh",background:BG,fontFamily:"system-ui,sans-serif",overflow:"hidden"}}>
-      <style>{`
-        @font-face{font-family:'ZZZBold';src:url('/fonts/integral-cf-bold.ttf') format('truetype');font-weight:700;font-style:normal}
-        html,body,#root{margin:0;padding:0;height:100%;background:${BG}}
-        input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-        input[type=number]{-moz-appearance:textfield}
-        ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${BRD};border-radius:3px}
-        .cal-grid::-webkit-scrollbar{width:6px}
-        .cal-grid *::-webkit-scrollbar{width:0px;display:none}
-      `}</style>
-      <div style={{position:"relative",width:"100%",height:"100%",background:BG,overflow:"hidden"}}>
-        <div style={{position:"absolute",top:18,left:20,zIndex:10}}>
-          <div style={{color:"#fff",fontWeight:900,fontSize:18,fontFamily:ZZZ,fontStyle:"italic",letterSpacing:1,lineHeight:1}}>
-            {getGreeting()}, <span style={{color:A}}>Dima</span>
-          </div>
-        </div>
-        <NavBar tab={tab} setTab={t=>{setTab(t);setShowBrowser(false)}}/>
-        <div style={{position:"absolute",left:12,top:56,right:12,bottom:browserTabs.length>0?50:12,transition:"bottom 0.3s"}}>
-          {browserTabs.map(t=>(
-            <div key={t.id} style={{position:"absolute",inset:0,zIndex:showBrowser&&activeTabId===t.id?50:(-1),opacity:showBrowser&&activeTabId===t.id?1:0,pointerEvents:showBrowser&&activeTabId===t.id?"auto":"none",borderRadius:16,overflow:"hidden",display:"flex",flexDirection:"column",background:BG}}>
-              <ZzzHeader onBack={closeBrowser} onMinimize={minimizeBrowser} title={t.title} rightLabel="Open in new tab" rightUrl={t.url}/>
-              <div style={{flex:1,background:"#fff",position:"relative"}}>
-                <iframe src={t.url} style={{width:"100%",height:"100%",border:"none"}} title={t.title}/>
-              </div>
-            </div>
-          ))}
-          {tab===0 && <TasksTab openIn={openIn}/>}
-          {tab===1 && <div style={{height:"100%",position:"relative"}}><LinkGrid items={CONFIGS} openIn={openIn}/></div>}
-          {tab===2 && <BoardsTab openIn={openIn}/>}
-          {tab===3 && <div style={{height:"100%",position:"relative"}}><LinkGrid items={FILES} openIn={openIn}/></div>}
-          <div style={{height:"100%",display:tab===4?"block":"none"}}><ToolsTab/></div>
-        </div>
-        <BrowserTabs tabs={browserTabs} activeId={activeTabId} showBrowser={showBrowser} onSelect={selectTab} onClose={closeTab}/>
-      </div>
-    </div>
-  );
-}
+/* Legacy Electron-less dashboard shell (LegacyDashboard, CalendarTab, NavBar, BoardsTab, LinkGrid,
+   InternalBrowser, BrowserTabs, MIRO_BOARDS) removed 2026-08-26: superseded by AppShell/webview
+   architecture and no longer referenced anywhere in this file. */
 
 const LINK_ICON_BY_NAME={
   "Trader Van":"/icons/hugeicons--van.png","LootBoxes":"/icons/memory--chest-fill.png","Offers":"/icons/circum--shopping-tag.png","Localization":"/icons/cil--language.png","Lottery":"/icons/pixelarticons--key-solid.png","Balance":"/icons/game-icons--ray-gun.png","Event Center":"/icons/ri--calendar-line.png","Card Roulette":"/icons/material-symbols--cards-star-sharp.png","Main Store":"/icons/uil--shop.png","Attributes":"/icons/carbon--attribute-definition.png","Pers. Events":"/icons/carbon--task-progress.png","Temp. Events":"/icons/material-symbols--event-list-outline-sharp.png","AB Test":"/icons/mdi--ab-testing.png","Exp Open":"/icons/streamline-ultimate--arrow-double-up-bold.png","Map List":"/icons/griddy-icons--map.png","Clan War":"/icons/game-icons--battle-tank.png","ADS Roulette":"/icons/material-symbols--shop-outline.png","Clan Chests":"/icons/ant-design--gold-filled.png","GameModeHub":"/icons/ri--layout-6-line.png","Tournament":"/icons/solar--cup-star-bold.png","Bots":"/icons/solar--bot-bold.png","Rotation":"/icons/material-symbols--screen-rotation-up-sharp.png",
