@@ -519,10 +519,48 @@ function OCard({offer,onUpdate,onRemove,onDuplicate}){
   );
 }
 
+function IconLibraryPicker({onSelect,onClose}){
+  const [files,setFiles]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [query,setQuery]=useState("");
+  useEffect(()=>{
+    let live=true;
+    window.iconLibrary?.list().then(list=>{if(live){setFiles(Array.isArray(list)?list:[]);setLoading(false)}}).catch(()=>{if(live)setLoading(false)});
+    return()=>{live=false};
+  },[]);
+  const filtered=useMemo(()=>{
+    const q=query.trim().toLowerCase();
+    const list=q?files.filter(f=>f.toLowerCase().includes(q)):files;
+    return list.slice(0,300);
+  },[files,query]);
+  return (
+    <div className="event-modal-backdrop" style={{position:"fixed",zIndex:60}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="event-modal" style={{width:"min(760px,100%)"}}>
+        <header><div><span>ICON LIBRARY</span><h2>выбор иконки</h2></div><button onClick={onClose}><FiX/></button></header>
+        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="поиск по имени файла, например tag предмета…" autoFocus style={{width:"100%",boxSizing:"border-box",marginBottom:12,padding:"10px 12px",background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,fontSize:13,outline:"none"}}/>
+        {loading&&<div style={{color:T2,fontSize:12,padding:20,textAlign:"center"}}>Загружаем библиотеку…</div>}
+        {!loading&&files.length===0&&<div style={{color:T2,fontSize:12,padding:20,textAlign:"center"}}>Библиотека иконок пуста — достуупна только в собранном приложении</div>}
+        {!loading&&files.length>0&&<>
+          <div style={{fontSize:10,color:T2,marginBottom:8}}>{filtered.length}{filtered.length>=300?"+":""} из {files.length}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(84px,1fr))",gap:8,maxHeight:420,overflowY:"auto"}}>
+            {filtered.map(f=>(
+              <button key={f} type="button" onClick={()=>onSelect(`/icons-items/${f}`)} title={f} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:6,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.borderColor=A} onMouseLeave={e=>e.currentTarget.style.borderColor=BRD}>
+                <img src={`/icons-items/${f}`} alt="" loading="lazy" style={{width:48,height:48,objectFit:"contain"}}/>
+                <span style={{fontSize:8,color:T2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",textAlign:"center"}}>{f.replace(/_icon1?_big\.(png|webp|jpg|jpeg|gif)$/i,"")}</span>
+              </button>
+            ))}
+          </div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
 function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const [selId,setSelId]=useState(null);
   const [tierStatus,setTierStatus]=useState("");
   const [listQuery,setListQuery]=useState("");
+  const [libraryOpen,setLibraryOpen]=useState(false);
   const iconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
   const visibleItems=useMemo(()=>{
@@ -577,7 +615,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
           <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
           <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
         </div>
-        <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"Текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Выбрать изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
+        <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>setLibraryOpen(true)}>Из библиотеки</button><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Своё изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
+        {libraryOpen&&<IconLibraryPicker onSelect={path=>{update({icon:path,iconName:""});setLibraryOpen(false)}} onClose={()=>setLibraryOpen(false)}/>}
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier</button>
           <span style={{fontSize:11,color:T2}}>{tierStatus||(sel.tier?`текущий tier: ${sel.tier}`:"tier не указан")}</span>

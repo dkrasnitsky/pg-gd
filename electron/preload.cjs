@@ -27,3 +27,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   buildLotteryConfig: (sheetName, items) => ipcRenderer.invoke("google:build-lottery-config", sheetName, items),
   fetchTier: (tag) => ipcRenderer.invoke("google:fetch-tier", tag),
 });
+
+contextBridge.exposeInMainWorld("iconLibrary", {
+  list: () => ipcRenderer.invoke("icons:list"),
+});

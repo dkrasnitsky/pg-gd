@@ -186,6 +186,18 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   return null;
 });
 
+function iconLibraryDir(){return path.join(__dirname,"..","dist","icons-items")}
+
+ipcMain.handle("icons:list",async()=>{
+  try{
+    const files=await fs.promises.readdir(iconLibraryDir());
+    return files.filter(name=>/\.(png|webp|jpg|jpeg|gif)$/i.test(name)).sort();
+  }catch(error){
+    if(error.code==="ENOENT")return [];
+    throw error;
+  }
+});
+
 function storePath(key){
   if(!storeKeys.has(key))throw new Error("Unknown store key");
   return path.join(app.getPath("userData"),`${key}.json`);
