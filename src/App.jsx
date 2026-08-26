@@ -107,6 +107,13 @@ function iv(item,qty){return item.unit ? qty/item.unit : qty*item.price}
 
 let _offerIdCounter=4;
 
+const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel"];
+const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
+const SALE_LOCATIONS=["Lottery","CardRoulette","PersonalEvent","TemplateEvent","Offer","PixelPass"];
+const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",PersonalEvent:"Personal Event",TemplateEvent:"Template Event",Offer:"Offer",PixelPass:"Pixel Pass"};
+const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",PersonalEvent:"👤",TemplateEvent:"📋",Offer:"🏷",PixelPass:"🎫"};
+function fmtItemDate(value){if(!value)return "—";const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"})}
+
 function Icon({type,color="#fff",sz=15}){
   const p={home:<path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>,tasks:<path d="M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm2 4v2h8V6H8zm0 4v2h8v-2H8zm0 4v2h5v-2H8z"/>,config:<path d="M12 15.5A3.5 3.5 0 0115.5 12 3.5 3.5 0 0112 8.5 3.5 3.5 0 018.5 12 3.5 3.5 0 0112 15.5zM19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65a.5.5 0 00.12-.64l-2-3.46a.5.5 0 00-.61-.22l-2.49 1a7.06 7.06 0 00-1.69-.98l-.38-2.65A.49.49 0 0014 2h-4a.49.49 0 00-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1a.5.5 0 00-.61.22l-2 3.46a.49.49 0 00.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65a.5.5 0 00-.12.64l2 3.46a.5.5 0 00.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.05.24.26.42.49.42h4c.24 0 .44-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1a.5.5 0 00.61-.22l2-3.46a.49.49 0 00-.12-.64l-2.11-1.65z"/>,boards:<path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/>,tools:<path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/>,up:<path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"/>,down:<path d="M12 5v14M5 12l7 7 7-7" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"/>,back:<path d="M15 18l-6-6 6-6" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"/>};
   return <svg width={sz} height={sz} viewBox="0 0 24 24" fill={["up","down","back"].includes(type)?"none":color}>{p[type]}</svg>;
@@ -270,6 +277,112 @@ function TasksTab({openIn,activeSection=0}){
 
 
 
+function ItemImage({src,size=48}){
+  if(src) return <img src={src} alt="" style={{width:size,height:size,objectFit:"contain",borderRadius:8,background:"#1a1a20",flexShrink:0}}/>;
+  return <div style={{width:size,height:size,borderRadius:8,background:"#1a1a20",border:`1px dashed ${BRD}`,display:"flex",alignItems:"center",justifyContent:"center",color:T2,fontSize:size*0.35,flexShrink:0}}>?</div>;
+}
+
+function ItemCard({item,onOpen}){
+  return (
+    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" style={{background:STRIPE,border:`1px solid ${BRD}`,borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8,cursor:"pointer",width:220,flexShrink:0,userSelect:"none"}}>
+      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <ItemImage src={item.icon}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:800,color:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name||"Без названия"}</div>
+          {item.tier&&<span style={{display:"inline-block",marginTop:3,padding:"1px 8px",borderRadius:20,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:700}}>{item.tier}</span>}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:T2,display:"flex",flexDirection:"column",gap:2}}>
+        <div>id: {item.id||"—"}</div>
+        <div>parts: {item.parts||"none"}</div>
+        <div style={{display:"flex",alignItems:"center",gap:5}}>last sale: {fmtItemDate(item.lastSale)}{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>
+      </div>
+    </div>
+  );
+}
+
+function ItemDetail({item,onClose}){
+  const rows=[["ID",item.id||"—"],["Parts",item.parts||"none"],["Tag",item.tag||"—"],["Type",item.type||"—"],["Rarity",item.rarity||"—"],["Setting",item.setting||"—"],["Tier",item.tier||"—"],["Last sale",fmtItemDate(item.lastSale)],["Sale location",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"]];
+  return (
+    <div style={{position:"absolute",inset:0,zIndex:50,background:BG,borderRadius:16,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <ZzzHeader onBack={onClose} title={item.name||"Предмет"}/>
+      <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",gap:20}}>
+        <ItemImage src={item.icon} size={140}/>
+        <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignContent:"start"}}>
+          {rows.map(([l,v])=>(
+            <div key={l} style={{background:"#1a1a22",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:9,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:600,marginBottom:4}}>{l}</div>
+              <div style={{fontSize:13,color:T1,fontWeight:600,wordBreak:"break-word"}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilterGroup({title,options,selected,onToggle}){
+  return (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:10,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>{title}</div>
+      {options.map(o=>(
+        <label key={o} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12,color:selected.has(o)?A:T1,cursor:"pointer"}}>
+          <input type="checkbox" checked={selected.has(o)} onChange={()=>onToggle(o)} style={{accentColor:A}}/>{typeof title==="string"&&title==="Сеттинг"?o:o}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function ContentPicker({items=[]}){
+  const [query,setQuery]=useState("");
+  const [typeFilter,setTypeFilter]=useState(()=>new Set());
+  const [rarityFilter,setRarityFilter]=useState(()=>new Set());
+  const [settingFilter,setSettingFilter]=useState(()=>new Set());
+  const [showFilters,setShowFilters]=useState(false);
+  const [openItem,setOpenItem]=useState(null);
+  const settingsPool=useMemo(()=>[...new Set(items.map(i=>i.setting).filter(Boolean))].sort(),[items]);
+  const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
+  const filtered=useMemo(()=>{
+    const q=query.trim().toLowerCase();
+    return items.filter(it=>{
+      if(q){
+        const hay=[it.id,it.parts,it.tag,it.name].map(v=>String(v??"").toLowerCase());
+        if(!hay.some(v=>v.includes(q)))return false;
+      }
+      if(typeFilter.size&&!typeFilter.has(it.type))return false;
+      if(rarityFilter.size&&!rarityFilter.has(it.rarity))return false;
+      if(settingFilter.size&&!settingFilter.has(it.setting))return false;
+      return true;
+    });
+  },[items,query,typeFilter,rarityFilter,settingFilter]);
+  return (
+    <div style={{position:"relative"}}>
+      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)}/>}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:10,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        <button style={{padding:"10px 22px",background:A,color:"#000",border:"none",borderRadius:10,fontWeight:800,fontFamily:ZZZ,fontStyle:"italic",cursor:"pointer",fontSize:13,flexShrink:0}}>Поиск</button>
+        <button onClick={()=>setShowFilters(v=>!v)} style={{width:44,flexShrink:0,background:showFilters?A:"transparent",border:`1.5px solid ${showFilters?A:BRD}`,borderRadius:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke={showFilters?"#000":T1} strokeWidth="2" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      <div style={{display:"flex",gap:14}}>
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
+          {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>Ничего не найдено</div>}
+          {filtered.map(it=><ItemCard key={it.uid} item={it} onOpen={setOpenItem}/>)}
+        </div>
+        {showFilters&&(
+          <div style={{width:200,flexShrink:0,background:STRIPE,border:`1px solid ${BRD}`,borderRadius:14,padding:14,maxHeight:520,overflowY:"auto"}}>
+            <FilterGroup title="тип предмета" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
+            <FilterGroup title="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
+            {settingsPool.length>0&&<FilterGroup title="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)}/>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OfferConstructor(){
   const [offers,setOffers]=useState([
     {id:1,label:"Offer 1",price:9.99,items:[]},
@@ -393,22 +506,85 @@ function OCard({offer,onUpdate,onRemove,onDuplicate}){
   );
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false}){
+function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
+  const [selId,setSelId]=useState(null);
+  const [tierStatus,setTierStatus]=useState("");
+  const iconInput=useRef(null);
+  const sel=items.find(i=>i.uid===selId)||null;
+  useEffect(()=>{setTierStatus("")},[selId]);
+  const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
+  const addItem=()=>{
+    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",icon:""};
+    onItemsChange([...items,created]);setSelId(created.uid);
+  };
+  const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
+  const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
+  const refreshTier=async()=>{
+    if(!sel)return;
+    if(!sel.tag){setTierStatus("Укажите tag");return}
+    setTierStatus("Получаем tier…");
+    try{
+      const tier=await window.workspaceGoogle?.fetchTier(sel.tag);
+      update({tier:tier||""});
+      setTierStatus(tier?`Tier: ${tier}`:"Не найдено в таблице");
+    }catch(e){setTierStatus("Ошибка: "+e.message)}
+  };
+  return <>
+    <aside className="settings-nav">
+      <div className="settings-title">Настройки</div>
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        <button type="button" onClick={onSwitchMode} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${BRD}`,background:"transparent",color:T2,fontSize:11,cursor:"pointer"}}>Навигация</button>
+        <button type="button" style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${A}`,background:A,color:"#000",fontSize:11,fontWeight:700,cursor:"pointer"}}>Каталог</button>
+      </div>
+      <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
+      <div className="settings-list">{items.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{i.name||"Без названия"}</span><FiChevronRight/></button>)}</div>
+    </aside>
+    <section className="settings-editor">
+      <header><div><span>Каталог предметов</span><h2>{sel?sel.name||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
+      {sel&&<div className="settings-card">
+        <label>Название<input value={sel.name} onChange={e=>update({name:e.target.value})}/></label>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <label>ID<input value={sel.id} onChange={e=>update({id:e.target.value})}/></label>
+          <label>Parts<input value={sel.parts} onChange={e=>update({parts:e.target.value})} placeholder="none"/></label>
+        </div>
+        <label>Tag (для поиска и подтягивания tier)<input value={sel.tag} onChange={e=>update({tag:e.target.value})} onBlur={refreshTier} placeholder="совпадает с колонкой E в Weapon Analytics"/></label>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
+          <label>Редкость<select value={sel.rarity} onChange={e=>update({rarity:e.target.value})}>{ITEM_RARITIES.map(r=><option key={r} value={r}>{r}</option>)}</select></label>
+        </div>
+        <label>Сеттинг<input value={sel.setting} onChange={e=>update({setting:e.target.value})} placeholder="например, Winter"/></label>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
+          <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
+        </div>
+        <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"Текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Выбрать изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier</button>
+          <span style={{fontSize:11,color:T2}}>{tierStatus||(sel.tier?`текущий tier: ${sel.tier}`:"tier не указан")}</span>
+        </div>
+        <button className="danger-button" onClick={removeItem}><FiTrash2/>удалить предмет</button>
+      </div>}
+    </section>
+  </>;
+}
+
+function ToolsTab({initialTool="offers",hideSelector=false,items=[]}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
     <div className="tools-page" style={{height:"100%",background:BG,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div className="tools-feature-header">
-        <div><span>PROBABILITY LAB</span><h1>{activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":"Offer Constructor"}</h1></div>
+        <div><span>PROBABILITY LAB</span><h1>{activeTool==="content"?"Подбор Контента":activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":"Offer Constructor"}</h1></div>
         <div style={{flex:1}}/>
         {!hideSelector&&<div style={{display:"flex",background:BG,borderRadius:20,padding:3,border:`1px solid ${BRD}`}}>
-          {[["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"]].map(([k,l])=>(
+          {[["content","Подбор Контента"],["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"]].map(([k,l])=>(
             <button key={k} onClick={()=>setActiveTool(k)} style={{padding:"6px 16px",borderRadius:18,fontSize:11,fontWeight:700,fontFamily:ZZZ,fontStyle:"italic",cursor:"pointer",border:"none",background:activeTool===k?A:"transparent",color:activeTool===k?"#000":T2,transition:"all .2s"}}>{l}</button>
           ))}
         </div>}
       </div>
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"18px 24px 24px"}}>
+          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items}/></div>
           <div style={{display:activeTool==="offers"?"block":"none"}}><OfferConstructor/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none"}}><LootboxSimulator/></div>
           <div style={{display:activeTool==="lottery"?"block":"none"}}><LotterySimulator/></div>
@@ -435,12 +611,12 @@ const APP_SECTIONS=[
   {id:"configs",label:"Конфиги",icon:"config",builtIn:true,items:CONFIGS.map((item,index)=>({id:`config-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"files",label:"Файлы",icon:"home",builtIn:true,items:FILES.map((item,index)=>({id:item.url===SHEETS_URL?"event-sheet":`file-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"tools",label:"Инструменты",icon:"tools",builtIn:true,items:[
-    {id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"}
+    {id:"content",label:"Подбор Контента"},{id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"}
   ]},
 ];
 
-const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator"};
-const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",offers:"tools",lootbox:"tools",lottery:"tools"};
+const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",content:"Подбор Контента",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator"};
+const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",content:"tools",offers:"tools",lootbox:"tools",lottery:"tools"};
 
 function normalizeNavigation(source){
   const saved=Array.isArray(source)?source:[];
@@ -474,7 +650,8 @@ function TintedIcon({src,className=""}){
   return <span className={`tinted-icon ${className}`} style={{"--icon-image":`url("${src}")`}} aria-hidden="true"/>;
 }
 
-function SettingsPanel({navigation,onChange,onClose}){
+function SettingsPanel({navigation,onChange,onClose,items,onItemsChange}){
+  const [panelMode,setPanelMode]=useState("nav");
   const [sectionId,setSectionId]=useState(()=>navigation[0]?.id);
   const [itemId,setItemId]=useState(null);
   const [showSymbols,setShowSymbols]=useState(false);
@@ -491,9 +668,14 @@ function SettingsPanel({navigation,onChange,onClose}){
   const removeItem=()=>{updateSection({items:section.items.filter(i=>i.id!==item.id)});setItemId(null)};
   const pickIcon=(event,apply)=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>apply({icon:String(reader.result),iconName:file.name});reader.readAsDataURL(file);event.target.value=""};
   const unicodeSymbols=["◇","◆","●","○","■","□","★","☆","✓","⚡","⚙","🔧","📄","📁","📊","📋","🗓","🧩","🎯","🛠","🚀","💡","🔗","🌐","🎮","🎲","💎","🏠","🔔","⏱"];
+  if(panelMode==="catalog")return <div className="settings-page"><ItemCatalogPanel items={items} onItemsChange={onItemsChange} onSwitchMode={()=>setPanelMode("nav")} onClose={onClose}/></div>;
   return <div className="settings-page">
     <aside className="settings-nav">
       <div className="settings-title">Настройки</div>
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        <button type="button" style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${A}`,background:A,color:"#000",fontSize:11,fontWeight:700,cursor:"pointer"}}>Навигация</button>
+        <button type="button" onClick={()=>setPanelMode("catalog")} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${BRD}`,background:"transparent",color:T2,fontSize:11,cursor:"pointer"}}>Каталог</button>
+      </div>
       <button className="settings-add" onClick={addSection}><FiPlus/>Добавить раздел</button>
       <div className="settings-list">{navigation.map(s=><button key={s.id} className={s.id===section?.id?"active":""} onClick={()=>{setSectionId(s.id);setItemId(null)}}><SectionIcon value={s.icon} size={15}/><span>{s.label}</span><FiChevronRight/></button>)}</div>
     </aside>
@@ -558,6 +740,7 @@ function AppShell(){
   const [tabs,setTabs]=useState(initial.tabs);
   const [activeId,setActiveId]=useState(initial.activeId);
   const [navigation,setNavigation]=useState(loadNavigation);
+  const [items,setItems]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-items-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
   const [selectedSection,setSelectedSection]=useState("dashboard");
   const [showSettings,setShowSettings]=useState(false);
   const [draggingTab,setDraggingTab]=useState(null);
@@ -571,10 +754,12 @@ function AppShell(){
     let cancelled=false;
     (async()=>{
       if(!window.workspaceStore)return;
-      const [savedNavigation,savedWorkspace]=await Promise.all([window.workspaceStore.read("navigation"),window.workspaceStore.read("workspace")]);
+      const [savedNavigation,savedWorkspace,savedItems]=await Promise.all([window.workspaceStore.read("navigation"),window.workspaceStore.read("workspace"),window.workspaceStore.read("items")]);
       if(cancelled)return;
       if(Array.isArray(savedNavigation)&&savedNavigation.length)setNavigation(normalizeNavigation(savedNavigation));
       else await window.workspaceStore.write("navigation",navigation);
+      if(Array.isArray(savedItems))setItems(savedItems);
+      else await window.workspaceStore.write("items",items);
       if(savedWorkspace?.tabs?.length){const migrated=migrateWorkspace(savedWorkspace);setTabs(migrated.tabs);setActiveId(migrated.activeId)}
       else await window.workspaceStore.write("workspace",{tabs,activeId});
       setStoreReady(true);
@@ -583,6 +768,7 @@ function AppShell(){
   },[]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-workspace-v2",JSON.stringify({tabs,activeId}))}catch{/* Electron file storage remains authoritative */}window.workspaceStore?.write("workspace",{tabs,activeId}).catch(console.error)},[tabs,activeId,storeReady]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-navigation-v1",JSON.stringify(navigation))}catch{/* selected images can exceed the browser quota */}window.workspaceStore?.write("navigation",navigation).catch(console.error)},[navigation,storeReady]);
+  useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-items-v1",JSON.stringify(items))}catch{/* selected images can exceed the browser quota */}window.workspaceStore?.write("items",items).catch(console.error)},[items,storeReady]);
   useEffect(()=>setTabs(prev=>prev.map(tab=>{for(const section of navigation){const item=section.items.find(i=>i.id===(tab.sourceItemId||tab.page));if(item)return{...tab,title:item.label,url:item.url||tab.url,section:section.id,icon:item.icon||null,tabIcon:item.tabIcon||tab.tabIcon}}return tab})),[navigation]);
 
   const openPage=(page,tabIcon)=>{
@@ -616,7 +802,7 @@ function AppShell(){
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
     if(tab.page==="events")return <EventCalendar/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items}/>;
   };
 
   return <div className="desktop-app">
@@ -644,7 +830,7 @@ function AppShell(){
           {tabs.map(tab=><div key={tab.id} className={tab.id===activeId?"tab-surface active":"tab-surface"}>{renderTab(tab)}</div>)}
           {!activeId&&<div className="empty-workspace"><div>{["configs","boards","files"].includes(selectedSection)?"Выбери файл":"Выбери страницу"}</div></div>}
         </div>
-        {showSettings&&<SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>setShowSettings(false)}/>}
+        {showSettings&&<SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>setShowSettings(false)} items={items} onItemsChange={setItems}/>}
       </section>
     </main>
   </div>;

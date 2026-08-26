@@ -8,9 +8,11 @@ const path = require("node:path");
 let localServer;
 let mainWindow;
 const workspacePartition="persist:pg3d-workspace";
-const storeKeys=new Set(["navigation","workspace","notes","calendar"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
+const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
+const tierSheetGid=619054802;
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
 const jiraEmail="d.krasnitsky@cubicgames.com";
 const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
@@ -159,6 +161,27 @@ ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
   }
   await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
   return{updated:normalized.length,sheetName:title};
+});
+
+ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
+  const needle=String(tag||"").trim().toLowerCase();
+  if(!needle)return null;
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
+  if(!sheet)throw new Error("Лист Weapon Analytics с указанным gid не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:K`)}?majorDimension=ROWS`);
+  const rows=valuesResponse.values||[];
+  for(const row of rows){
+    const cell=String(row[0]??"").trim().toLowerCase();
+    if(cell&&cell===needle){
+      const tier=row[6];
+      return tier!==undefined&&tier!==""?String(tier):null;
+    }
+  }
+  return null;
 });
 
 function storePath(key){
