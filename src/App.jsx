@@ -587,12 +587,13 @@ function SettingPicker({value,pool,onChange}){
         {selected.size?[...selected].join(", "):"Выбрать сеттинг…"}
       </button>
       {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:10,maxHeight:240,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
           {pool.length===0&&<div style={{fontSize:11,color:T2,marginBottom:8}}>Пока нет сеттингов</div>}
           {pool.map(name=>(
-            <label key={name} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12,color:selected.has(name)?A:T1,cursor:"pointer"}}>
-              <input type="checkbox" checked={selected.has(name)} onChange={()=>toggle(name)} style={{accentColor:A}}/>{name}
-            </label>
+            <div key={name} onClick={()=>toggle(name)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer"}}>
+              <input type="checkbox" checked={selected.has(name)} onChange={()=>toggle(name)} onClick={e=>e.stopPropagation()} style={{width:14,height:14,flexShrink:0,accentColor:A,margin:0}}/>
+              <span style={{flex:1,textAlign:"left",fontSize:12,fontWeight:400,textTransform:"none",color:selected.has(name)?A:T1}}>{name}</span>
+            </div>
           ))}
           <div style={{display:"flex",gap:6,marginTop:8,borderTop:`1px solid ${BRD}`,paddingTop:8}}>
             <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addNew()}}} placeholder="новый сеттинг…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
