@@ -8,11 +8,14 @@ const path = require("node:path");
 let localServer;
 let mainWindow;
 const workspacePartition="persist:pg3d-workspace";
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
+const nameSheetGid=1632164539;
+const weaponGeneratorPath="Z:\\pg3d\\Assets\\Scripts\\Item\\Generated\\ItemConverterId_clientToIndex.cs";
+const SALE_SITE_HEADERS=[["Lottery","Lottery"],["CardRoulette","CardRoulette"],["AdsRoulette","AdsRoulette"],["TopUp","PersonalEvent"],["TraderVan","TraderVan"],["Offers","Offer"],["PixelPass","PixelPass"],["Signature","TemplateEvent"]];
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
 const jiraEmail="d.krasnitsky@cubicgames.com";
 const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
@@ -163,90 +166,210 @@ ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
   return{updated:normalized.length,sheetName:title};
 });
 
+function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
+
+async function fetchWeaponAnalytics(accessToken){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
+  const lookup=new Map();
+  if(!sheet)return lookup;
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:V`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
+  for(const row of valuesResponse.values||[]){
+    const key=String(row[0]??"").trim().toLowerCase();
+    if(!key||lookup.has(key))continue;
+    lookup.set(key,{type:clean(row[2]),rarity:clean(row[3]),tier:clean(row[5]),lethality:clean(row[13]),prevalence:clean(row[17])});
+  }
+  return lookup;
+}
+
+function sheetSerialToIso(serial){
+  const ms=Math.round((serial-25569)*86400*1000);
+  const d=new Date(ms);
+  return Number.isNaN(d.getTime())?null:d.toISOString().slice(0,10);
+}
+
+function parseSheetCellDate(value){
+  if(value===undefined||value===null||value==="")return null;
+  if(typeof value==="number")return sheetSerialToIso(value);
+  const text=String(value).trim();
+  let m=text.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/);
+  if(m){let[,d,mo,y]=m;if(y.length===2)y="20"+y;return `${y.padStart(4,"0")}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`}
+  m=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return text;
+  return null;
+}
+
+async function fetchNamesAndSaleDates(accessToken){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===nameSheetGid);
+  const names=new Map();const sales=new Map();
+  if(!sheet)return {names,sales};
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const headerResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:AZ1`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const header=(headerResp.values&&headerResp.values[0])||[];
+  const headerMap=new Map();
+  header.forEach((h,i)=>{const key=String(h||"").trim().toLowerCase();if(key&&!headerMap.has(key))headerMap.set(key,i)});
+  const tagCol=headerMap.has("tag")?headerMap.get("tag"):0;
+  const nameCol=headerMap.has("name")?headerMap.get("name"):1;
+  const siteCols=[];
+  for(const [siteHeader,siteKey] of SALE_SITE_HEADERS){
+    const col=headerMap.get(siteHeader.toLowerCase());
+    if(col!==undefined)siteCols.push({siteKey,dateCol:col+1});
+  }
+  const maxCol=Math.max(tagCol,nameCol,...siteCols.map(s=>s.dateCol),0);
+  const range=`${quotedTitle}!A2:${colLetter(maxCol)}100000`;
+  const dataResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  for(const row of dataResp.values||[]){
+    const tag=String(row[tagCol]??"").trim();
+    if(!tag)continue;
+    const key=tag.toLowerCase();
+    const name=String(row[nameCol]??"").trim();
+    if(name&&!names.has(key))names.set(key,name);
+    let best=null;
+    for(const {siteKey,dateCol} of siteCols){
+      const iso=parseSheetCellDate(row[dateCol]);
+      if(iso&&(!best||iso>best.date))best={date:iso,site:siteKey};
+    }
+    if(best&&!sales.has(key))sales.set(key,best);
+  }
+  return {names,sales};
+}
+
+function extractDictionaryBody(text,funcName){
+  const defRe=new RegExp(`Create${funcName}Dictionary\\(\\)\\s*=>`);
+  const defMatch=defRe.exec(text);
+  if(!defMatch)return null;
+  const openIdx=text.indexOf("{",defMatch.index+defMatch[0].length);
+  if(openIdx<0)return null;
+  let depth=1,p=openIdx+1;
+  while(depth>0&&p<text.length){
+    if(text[p]==="{")depth++;
+    else if(text[p]==="}")depth--;
+    p++;
+  }
+  return text.slice(openIdx,p);
+}
+
+function parseTagIndexPairs(body){
+  const map=new Map();
+  const re=/new TagIndexStruct\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*(\d+)\s*\)/g;
+  let m;
+  while((m=re.exec(body))!==null){
+    if(!map.has(m[1]))map.set(m[1],m[2]);
+  }
+  return map;
+}
+
+async function parseWeaponGenerator(){
+  let text;
+  try{
+    text=await fs.promises.readFile(weaponGeneratorPath,"utf8");
+  }catch(error){
+    console.log("[sync] weapon generator file not reachable (drive not mounted?), skipping",error.message);
+    return null;
+  }
+  const weaponBody=extractDictionaryBody(text,"Weapon");
+  if(!weaponBody){
+    console.error("[sync] CreateWeaponDictionary not found in generator file");
+    return null;
+  }
+  const partsBody=extractDictionaryBody(text,"Parts");
+  return {weaponMap:parseTagIndexPairs(weaponBody),partsMap:partsBody?parseTagIndexPairs(partsBody):new Map()};
+}
+
+async function runWeaponAutoSync(){
+  const generator=await parseWeaponGenerator();
+  if(!generator)return;
+
+  let existing=[];
+  try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
+
+  const weaponEntries=[...generator.weaponMap.entries()];
+  const weaponLower=new Map(weaponEntries.map(([tag,id])=>[tag.toLowerCase(),{tag,id}]));
+  const partsLower=new Map([...generator.partsMap].map(([tag,id])=>[tag.toLowerCase(),id]));
+  const existingTagsLower=new Set(existing.filter(i=>i.tag).map(i=>String(i.tag).toLowerCase()));
+  const newEntries=weaponEntries.filter(([tag])=>!existingTagsLower.has(tag.toLowerCase()));
+  console.log(`[sync] generator: ${weaponEntries.length} weapon tags, ${newEntries.length} new`);
+
+  let iconByLower=new Map();
+  try{
+    const files=await fs.promises.readdir(iconLibraryDir());
+    iconByLower=new Map(files.map(f=>[f.toLowerCase(),f]));
+  }catch(error){/* icon library not present in this build; icons stay empty */}
+  const matchIcon=tag=>{
+    for(const ext of ["png","webp","jpg","jpeg","gif"]){
+      const real=iconByLower.get(`${tag}_icon1_big.${ext}`.toLowerCase());
+      if(real)return `/icons-items/${real}`;
+    }
+    return "";
+  };
+
+  let uidSeed=Date.now();
+  const createdItems=newEntries.map(([tag,id])=>({
+    uid:`item-${uidSeed++}`,
+    id:id||"",parts:partsLower.get(tag.toLowerCase())||"",tag,
+    name:"",type:"Weapon",rarity:"",setting:"",lastSale:"",saleLocation:"",
+    tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",
+    icon:matchIcon(tag),
+  }));
+
+  let allItems=[...existing,...createdItems];
+
+  let analytics=new Map();
+  let sheetInfo={names:new Map(),sales:new Map()};
+  try{
+    const accessToken=await getGoogleAccessToken();
+    analytics=await fetchWeaponAnalytics(accessToken);
+    sheetInfo=await fetchNamesAndSaleDates(accessToken);
+    console.log(`[sync] Weapon Analytics: ${analytics.size} rows; name/sale sheet: ${sheetInfo.names.size} names, ${sheetInfo.sales.size} sale dates`);
+  }catch(error){
+    console.error("[sync] could not reach Google Sheets this run; tier/type/rarity/name/sale left unchanged",error.message||error);
+  }
+
+  allItems=allItems.map(item=>{
+    if(!item.tag)return item;
+    const key=String(item.tag).toLowerCase();
+    const patch={};
+    const weap=weaponLower.get(key);
+    if(weap)patch.id=weap.id;
+    const parts=partsLower.get(key);
+    if(parts!==undefined)patch.parts=parts;
+    const info=analytics.get(key);
+    if(info){
+      patch.tier=info.tier||"";
+      patch.sheetType=info.type||"";
+      patch.sheetRarity=info.rarity||"";
+      patch.sheetLethality=info.lethality||"";
+      patch.sheetPrevalence=info.prevalence||"";
+    }
+    const name=sheetInfo.names.get(key);
+    if(name!==undefined)patch.sheetName=name;
+    const sale=sheetInfo.sales.get(key);
+    if(sale){patch.lastSale=sale.date;patch.saleLocation=sale.site}
+    return Object.keys(patch).length?{...item,...patch}:item;
+  });
+
+  const target=storePath("items");
+  const temporary=`${target}.${process.pid}.${Date.now()}.sync.tmp`;
+  await fs.promises.mkdir(path.dirname(target),{recursive:true});
+  await fs.promises.writeFile(temporary,JSON.stringify(allItems),"utf8");
+  await fs.promises.rename(temporary,target);
+  console.log(`[sync] done: ${createdItems.length} new items, ${allItems.length} total`);
+}
+
 ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   const needle=String(tag||"").trim().toLowerCase();
   if(!needle)return null;
   const accessToken=await getGoogleAccessToken();
-  const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
-  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
-  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
-  if(!sheet)throw new Error("Лист Weapon Analytics с указанным gid не найден");
-  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:J`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
-  const rows=valuesResponse.values||[];
-  const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
-  for(const row of rows){
-    const cell=String(row[0]??"").trim().toLowerCase();
-    if(cell&&cell===needle){
-      return {tier:clean(row[5]),type:clean(row[2]),rarity:clean(row[3])};
-    }
-  }
-  return null;
+  const analytics=await fetchWeaponAnalytics(accessToken);
+  return analytics.get(needle)||null;
 });
 
 function iconLibraryDir(){return path.join(__dirname,"..","dist","icons-items")}
-
-async function runPendingImport(){
-  const importPath=path.join(__dirname,"..","import-enriched.json");
-  let queued;
-  try{
-    queued=JSON.parse(await fs.promises.readFile(importPath,"utf8"));
-  }catch(error){
-    if(error.code==="ENOENT")return;
-    throw error;
-  }
-  if(!Array.isArray(queued)||!queued.length)return;
-
-  let existing=[];
-  try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
-  const existingTags=new Set(existing.map(item=>String(item.tag||"").toLowerCase()).filter(Boolean));
-  const toAdd=queued.filter(entry=>entry.tag&&!existingTags.has(String(entry.tag).toLowerCase()));
-  console.log(`[import] queued ${queued.length}, new ${toAdd.length}, skipped duplicates ${queued.length-toAdd.length}`);
-  if(!toAdd.length){await fs.promises.rename(importPath,`${importPath}.done`);return}
-
-  const lookup=new Map();
-  try{
-    const accessToken=await getGoogleAccessToken();
-    const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
-    const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
-    const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
-    if(sheet){
-      const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-      const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:J`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
-      const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
-      for(const row of valuesResponse.values||[]){
-        const key=String(row[0]??"").trim().toLowerCase();
-        if(key&&!lookup.has(key))lookup.set(key,{type:clean(row[2]),rarity:clean(row[3]),tier:clean(row[5])});
-      }
-      console.log(`[import] loaded ${lookup.size} rows from Weapon Analytics`);
-    }else{
-      console.error("[import] Weapon Analytics sheet with the configured gid was not found; tier/type/rarity left blank");
-    }
-  }catch(error){
-    console.error("[import] could not reach Weapon Analytics, tier/type/rarity left blank",error);
-  }
-
-  let uidSeed=Date.now();
-  const created=toAdd.map(entry=>{
-    const info=lookup.get(String(entry.tag||"").toLowerCase())||{};
-    return {
-      uid:`item-${uidSeed++}`,
-      id:entry.id||"",parts:entry.parts||"",tag:entry.tag||"",name:entry.name||"",
-      type:"Weapon",rarity:"",setting:"",lastSale:"",saleLocation:"",
-      tier:info.tier||"",sheetType:info.type||"",sheetRarity:info.rarity||"",
-      icon:entry.icon||"",
-    };
-  });
-
-  const merged=[...existing,...created];
-  const target=storePath("items");
-  const temporary=`${target}.${process.pid}.${Date.now()}.import.tmp`;
-  await fs.promises.mkdir(path.dirname(target),{recursive:true});
-  await fs.promises.writeFile(temporary,JSON.stringify(merged),"utf8");
-  await fs.promises.rename(temporary,target);
-  await fs.promises.rename(importPath,`${importPath}.done`);
-  console.log(`[import] done: added ${created.length} items (total now ${merged.length})`);
-}
 
 ipcMain.handle("icons:list",async()=>{
   try{
@@ -342,7 +465,7 @@ async function createWindow(){
 
 app.whenReady().then(async()=>{
   await createWindow();
-  runPendingImport().catch(error=>console.error("[import] failed",error));
+  runWeaponAutoSync().catch(error=>console.error("[sync] failed",error));
 });
 ipcMain.on("window:minimize",event=>BrowserWindow.fromWebContents(event.sender)?.minimize());
 ipcMain.on("window:toggle-maximize",event=>{const win=BrowserWindow.fromWebContents(event.sender);if(!win)return;win.isMaximized()?win.unmaximize():win.maximize()});

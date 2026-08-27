@@ -109,11 +109,12 @@ let _offerIdCounter=4;
 
 const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Primary","Backup","Melee","Special","Sniper","Premium"];
 const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
-const SALE_LOCATIONS=["Lottery","CardRoulette","PersonalEvent","TemplateEvent","Offer","PixelPass"];
-const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",PersonalEvent:"Personal Event",TemplateEvent:"Template Event",Offer:"Offer",PixelPass:"Pixel Pass"};
-const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",PersonalEvent:"👤",TemplateEvent:"📋",Offer:"🏷",PixelPass:"🎫"};
+const SALE_LOCATIONS=["Lottery","CardRoulette","AdsRoulette","PersonalEvent","TraderVan","Offer","PixelPass","TemplateEvent"];
+const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",AdsRoulette:"Ads Roulette",PersonalEvent:"Personal Event",TraderVan:"Trader Van",Offer:"Offer",PixelPass:"Pixel Pass",TemplateEvent:"Template Event"};
+const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",AdsRoulette:"📺",PersonalEvent:"👤",TraderVan:"🚐",Offer:"🏷",PixelPass:"🎫",TemplateEvent:"📋"};
 const RARITY_META={Common:{label:"Обычная",color:"#e5e5e5"},Rare:{label:"Редкая",color:"#3b82f6"},Epic:{label:"Эпическая",color:"#fbbf24"},Legendary:{label:"Легендарная",color:"#f97316"},Mythic:{label:"Мифическая",color:"#a855f7"}};
 function effectiveRarity(item){return item?.sheetRarity||item?.rarity||""}
+function effectiveName(item){return item?.name||item?.sheetName||""}
 function rarityMetaFor(value){const key=Object.keys(RARITY_META).find(k=>k.toLowerCase()===String(value||"").trim().toLowerCase());return key?RARITY_META[key]:null}
 function fmtItemDate(value){if(!value)return "—";const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"})}
 
@@ -287,12 +288,13 @@ function ItemImage({src,size=48}){
 
 function ItemCard({item,onOpen}){
   const rarity=rarityMetaFor(effectiveRarity(item));
+  const displayName=effectiveName(item);
   return (
     <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
         <ItemImage src={item.icon} size={52}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:800,color:"#fff",textTransform:"uppercase",letterSpacing:.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:6}}>{item.name||"без названия"}</div>
+          <div style={{fontSize:14,fontWeight:800,color:"#fff",textTransform:"uppercase",letterSpacing:.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:6}}>{displayName||"без названия"}</div>
           <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:T1}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
             {item.tier&&<span style={{padding:"2px 8px",borderRadius:2,border:`1px solid ${A}`,color:A,fontSize:10,fontWeight:800}}>{item.tier}</span>}
@@ -308,17 +310,22 @@ function ItemCard({item,onOpen}){
   );
 }
 
-function ItemDetail({item,onClose}){
+function ItemDetail({item,onClose,onSendToLottery}){
   const rarity=rarityMetaFor(effectiveRarity(item));
-  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"]];
+  const displayName=effectiveName(item);
+  const [sent,setSent]=useState(false);
+  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]];
   if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal">
-        <header><div><span>ITEM DATA</span><h2>{item.name||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
-        <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:6}}>
-          <ItemImage src={item.icon} size={72}/>
-          {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
+        <header><div><span>ITEM DATA</span><h2>{displayName||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
+        <div style={{display:"flex",gap:20,alignItems:"flex-start",marginBottom:14,flexWrap:"wrap"}}>
+          <ItemImage src={item.icon} size={256}/>
+          <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
+            {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
+            {onSendToLottery&&<button type="button" className={sent?"ghost-action":"primary-action"} onClick={()=>{onSendToLottery(item);setSent(true);setTimeout(()=>setSent(false),1500)}}>{sent?"Отправлено ✓":"Отправить в Lottery Simulator"}</button>}
+          </div>
         </div>
         <div className="form-columns">
           {rows.map(([l,v])=>(
@@ -330,7 +337,7 @@ function ItemDetail({item,onClose}){
   );
 }
 
-function FilterDropdown({label,options,selected,onToggle}){
+function FilterDropdown({label,options,selected,onToggle,align="left"}){
   const [open,setOpen]=useState(false);
   const boxRef=useRef(null);
   useEffect(()=>{
@@ -345,12 +352,12 @@ function FilterDropdown({label,options,selected,onToggle}){
         {label}{selected.size>0?` (${selected.size})`:""}
       </button>
       {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,minWidth:190,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,minWidth:190,maxWidth:260,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
           {options.length===0&&<div style={{fontSize:11,color:T2,padding:"2px 4px"}}>Нет значений</div>}
           {options.map(o=>(
-            <div key={o} onClick={()=>onToggle(o)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer",whiteSpace:"nowrap"}}>
+            <div key={o} onClick={()=>onToggle(o)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer"}}>
               <input type="checkbox" checked={selected.has(o)} onChange={()=>onToggle(o)} onClick={e=>e.stopPropagation()} style={{width:14,height:14,flexShrink:0,accentColor:A,margin:0}}/>
-              <span style={{flex:1,textAlign:"left",fontSize:12,fontWeight:400,textTransform:"none",color:selected.has(o)?A:T1}}>{o}</span>
+              <span style={{flex:1,textAlign:"left",fontSize:12,fontWeight:400,textTransform:"none",color:selected.has(o)?A:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span>
             </div>
           ))}
         </div>
@@ -359,26 +366,56 @@ function FilterDropdown({label,options,selected,onToggle}){
   );
 }
 
-function ContentPicker({items=[]}){
+function RangeFilterDropdown({label,from,to,onFromChange,onToChange,align="left"}){
+  const [open,setOpen]=useState(false);
+  const boxRef=useRef(null);
+  const active=from!==""||to!=="";
+  useEffect(()=>{
+    if(!open)return;
+    const onDocClick=e=>{if(boxRef.current&&!boxRef.current.contains(e.target))setOpen(false)};
+    document.addEventListener("mousedown",onDocClick);
+    return()=>document.removeEventListener("mousedown",onDocClick);
+  },[open]);
+  return (
+    <div ref={boxRef} style={{position:"relative",flexShrink:0}}>
+      <button type="button" onClick={()=>setOpen(v=>!v)} className={active?"primary-action":"ghost-action"} style={{whiteSpace:"nowrap"}}>
+        {label}{active?` (${from||"…"}–${to||"…"})`:""}
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:10,minWidth:190,boxShadow:"0 8px 24px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",gap:8}}>
+          <input type="number" value={from} onChange={e=>onFromChange(e.target.value)} placeholder="От" style={{width:70,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+          <span style={{color:T2,fontSize:12}}>–</span>
+          <input type="number" value={to} onChange={e=>onToChange(e.target.value)} placeholder="До" style={{width:70,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContentPicker({items=[],settingsList=[],onSendToLottery}){
   const [query,setQuery]=useState("");
   const [typeFilter,setTypeFilter]=useState(()=>new Set());
   const [rarityFilter,setRarityFilter]=useState(()=>new Set());
   const [tierFilter,setTierFilter]=useState(()=>new Set());
   const [settingFilter,setSettingFilter]=useState(()=>new Set());
+  const [lethalityFrom,setLethalityFrom]=useState("");
+  const [lethalityTo,setLethalityTo]=useState("");
   const [openItem,setOpenItem]=useState(null);
   const settingsPool=useMemo(()=>{
-    const all=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
-    return [...new Set(all)].sort();
-  },[items]);
+    const used=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
+    return [...new Set([...(settingsList||[]),...used])].sort();
+  },[items,settingsList]);
   const tierPool=useMemo(()=>[...new Set(items.map(i=>i.tier).filter(Boolean))].sort(),[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
-  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0;
+  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0||lethalityFrom!==""||lethalityTo!=="";
   const filtered=useMemo(()=>{
     if(!hasActiveSearch)return [];
     const q=query.trim().toLowerCase();
+    const lo=lethalityFrom!==""?Number(lethalityFrom):null;
+    const hi=lethalityTo!==""?Number(lethalityTo):null;
     return items.filter(it=>{
       if(q){
-        const hay=[it.id,it.parts,it.tag,it.name].map(v=>String(v??"").toLowerCase());
+        const hay=[it.id,it.parts,it.tag,it.name,it.sheetName].map(v=>String(v??"").toLowerCase());
         if(!hay.some(v=>v.includes(q)))return false;
       }
       if(typeFilter.size&&!typeFilter.has(it.type)&&!typeFilter.has(it.sheetType))return false;
@@ -388,19 +425,28 @@ function ContentPicker({items=[]}){
         const itemSettings=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
         if(!itemSettings.some(s=>settingFilter.has(s)))return false;
       }
+      if(lo!==null||hi!==null){
+        const value=Number(it.sheetLethality);
+        if(!Number.isFinite(value))return false;
+        if(lo!==null&&value<lo)return false;
+        if(hi!==null&&value>hi)return false;
+      }
       return true;
     });
-  },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,hasActiveSearch]);
+  },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,lethalityFrom,lethalityTo,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
-      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)}/>}
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
-        <button className="primary-action">Поиск</button>
-        <FilterDropdown label="тип" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
-        <FilterDropdown label="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
-        <FilterDropdown label="тир" options={tierPool} selected={tierFilter} onToggle={v=>toggle(setTierFilter,v)}/>
-        <FilterDropdown label="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)}/>
+      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onSendToLottery={onSendToLottery}/>}
+      <div style={{position:"sticky",top:0,zIndex:25,background:BG,marginTop:-18,marginLeft:-24,marginRight:-24,paddingTop:18,paddingLeft:24,paddingRight:24,paddingBottom:14}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          <button className="primary-action">Поиск</button>
+          <FilterDropdown label="тип" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
+          <FilterDropdown label="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
+          <FilterDropdown label="тир" options={tierPool} selected={tierFilter} onToggle={v=>toggle(setTierFilter,v)}/>
+          <RangeFilterDropdown label="летальность" from={lethalityFrom} to={lethalityTo} onFromChange={setLethalityFrom} onToChange={setLethalityTo}/>
+          <FilterDropdown label="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)} align="right"/>
+        </div>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
         {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>{hasActiveSearch?"Ничего не найдено":"Начните поиск или выберите фильтр, чтобы увидеть предметы"}</div>}
@@ -570,7 +616,7 @@ function IconLibraryPicker({onSelect,onClose}){
   );
 }
 
-function SettingPicker({value,pool,onChange}){
+function SettingPicker({value,pool,onChange,allowCreate=true}){
   const [open,setOpen]=useState(false);
   const [draft,setDraft]=useState("");
   const boxRef=useRef(null);
@@ -605,17 +651,78 @@ function SettingPicker({value,pool,onChange}){
               <span style={{flex:1,textAlign:"left",fontSize:12,fontWeight:400,textTransform:"none",color:selected.has(name)?A:T1}}>{name}</span>
             </div>
           ))}
-          <div style={{display:"flex",gap:6,marginTop:8,borderTop:`1px solid ${BRD}`,paddingTop:8}}>
-            <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addNew()}}} placeholder="новый сеттинг…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-            <button type="button" onClick={addNew} className="icon-upload">+ New</button>
-          </div>
+          {allowCreate&&(
+            <div style={{display:"flex",gap:6,marginTop:8,borderTop:`1px solid ${BRD}`,paddingTop:8}}>
+              <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addNew()}}} placeholder="новый сеттинг…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              <button type="button" onClick={addNew} className="icon-upload">+ New</button>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
+function SettingsManager({settingsList,onSettingsListChange,items,onItemsChange}){
+  const [newName,setNewName]=useState("");
+  const [renaming,setRenaming]=useState(null);
+  const [renameDraft,setRenameDraft]=useState("");
+  const pool=useMemo(()=>{
+    const used=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
+    return [...new Set([...(settingsList||[]),...used])].sort();
+  },[items,settingsList]);
+  const addSetting=()=>{
+    const name=newName.trim();
+    if(!name||pool.includes(name))return;
+    onSettingsListChange([...(settingsList||[]),name]);
+    setNewName("");
+  };
+  const commitRename=oldName=>{
+    const next=renameDraft.trim();
+    setRenaming(null);
+    if(!next||next===oldName)return;
+    onSettingsListChange((settingsList||[]).filter(s=>s!==oldName).concat(next));
+    onItemsChange(items.map(it=>{
+      const list=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
+      if(!list.includes(oldName))return it;
+      return {...it,setting:[...new Set(list.map(s=>s===oldName?next:s))].join(", ")};
+    }));
+  };
+  const removeSetting=name=>{
+    if(!window.confirm(`удалить сеттинг «${name}»? Он будет снят у всех предметов.`))return;
+    onSettingsListChange((settingsList||[]).filter(s=>s!==name));
+    onItemsChange(items.map(it=>{
+      const list=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
+      if(!list.includes(name))return it;
+      return {...it,setting:list.filter(s=>s!==name).join(", ")};
+    }));
+  };
+  return (
+    <div style={{marginBottom:12,padding:10,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2}}>
+      <div style={{fontSize:10,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>Сеттинги</div>
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8,maxHeight:160,overflowY:"auto"}}>
+        {pool.length===0&&<div style={{fontSize:11,color:T2}}>Пока нет сеттингов</div>}
+        {pool.map(name=>(
+          <div key={name} style={{display:"flex",alignItems:"center",gap:6}}>
+            {renaming===name?(
+              <input autoFocus value={renameDraft} onChange={e=>setRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitRename(name);if(e.key==="Escape")setRenaming(null)}} onBlur={()=>commitRename(name)} style={{flex:1,background:"#111",border:`1px solid ${A}`,borderRadius:2,color:T1,fontSize:12,padding:"3px 6px",outline:"none"}}/>
+            ):(
+              <span style={{flex:1,fontSize:12,color:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+            )}
+            <button type="button" onClick={()=>{setRenaming(name);setRenameDraft(name)}} title="Переименовать" style={{background:"transparent",border:"none",color:T2,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✎</button>
+            <button type="button" onClick={()=>removeSetting(name)} title="удалить" style={{background:"transparent",border:"none",color:DNG,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✕</button>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addSetting()}}} placeholder="новый сеттинг…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+        <button type="button" onClick={addSetting} className="icon-upload">+ New</button>
+      </div>
+    </div>
+  );
+}
+
+function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList=[],onSettingsListChange}){
   const [selId,setSelId]=useState(null);
   const [tierStatus,setTierStatus]=useState("");
   const [listQuery,setListQuery]=useState("");
@@ -623,18 +730,18 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const iconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
   const settingsPool=useMemo(()=>{
-    const all=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
-    return [...new Set(all)].sort();
-  },[items]);
+    const used=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
+    return [...new Set([...(settingsList||[]),...used])].sort();
+  },[items,settingsList]);
   const visibleItems=useMemo(()=>{
     const q=listQuery.trim().toLowerCase();
     if(!q)return items;
-    return items.filter(i=>[i.name,i.id,i.tag].some(v=>String(v??"").toLowerCase().includes(q)));
+    return items.filter(i=>[i.name,i.sheetName,i.id,i.tag].some(v=>String(v??"").toLowerCase().includes(q)));
   },[items,listQuery]);
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
-    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",icon:""};
+    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:""};
     onItemsChange([...items,created]);setSelId(created.uid);
   };
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
@@ -645,7 +752,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
     setTierStatus("Получаем данные из Weapon Analytics…");
     try{
       const info=await window.workspaceGoogle?.fetchTier(sel.tag);
-      update({tier:info?.tier||"",sheetType:info?.type||"",sheetRarity:info?.rarity||""});
+      update({tier:info?.tier||"",sheetType:info?.type||"",sheetRarity:info?.rarity||"",sheetLethality:info?.lethality||"",sheetPrevalence:info?.prevalence||""});
       setTierStatus(info?.tier||info?.type||info?.rarity?`найдено: tier ${info?.tier||"—"}, type ${info?.type||"—"}, rarity ${info?.rarity||"—"}`:"Не найдено в таблице");
     }catch(e){setTierStatus("Ошибка: "+e.message)}
   };
@@ -656,21 +763,22 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
         <button type="button" onClick={onSwitchMode} style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${BRD}`,background:"transparent",color:T2,fontSize:11,cursor:"pointer"}}>Навигация</button>
         <button type="button" style={{flex:1,padding:"6px 0",borderRadius:8,border:`1px solid ${A}`,background:A,color:"#000",fontSize:11,fontWeight:700,cursor:"pointer"}}>Каталог</button>
       </div>
+      <SettingsManager settingsList={settingsList} onSettingsListChange={onSettingsListChange} items={items} onItemsChange={onItemsChange}/>
       <input value={listQuery} onChange={e=>setListQuery(e.target.value)} placeholder="Поиск по названию, id или tag…" style={{width:"100%",boxSizing:"border-box",marginBottom:8,padding:"8px 10px",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,outline:"none"}}/>
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
-      <div className="settings-list">{visibleItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{i.name||"Без названия"}</span><FiChevronRight/></button>)}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
+      <div className="settings-list">{visibleItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{effectiveName(i)||"Без названия"}</span><FiChevronRight/></button>)}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
     </aside>
     <section className="settings-editor">
-      <header><div><span>Каталог предметов</span><h2>{sel?sel.name||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
+      <header><div><span>Каталог предметов</span><h2>{sel?effectiveName(sel)||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
       {sel&&<div className="settings-card">
-        <label>Название<input value={sel.name} onChange={e=>update({name:e.target.value})}/></label>
+        <label>Название<input value={sel.name} onChange={e=>update({name:e.target.value})} placeholder={sel.sheetName?`${sel.sheetName} (из таблицы)`:"Название"}/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>ID<input value={sel.id} onChange={e=>update({id:e.target.value})}/></label>
           <label>Parts<input value={sel.parts} onChange={e=>update({parts:e.target.value})} placeholder="none"/></label>
         </div>
         <label>Tag (для поиска и подтягивания tier)<input value={sel.tag} onChange={e=>update({tag:e.target.value})} onBlur={refreshTier} placeholder="совпадает с колонкой E в Weapon Analytics"/></label>
         <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
-        <label>Сеттинг<SettingPicker value={sel.setting} pool={settingsPool} onChange={val=>update({setting:val})}/></label>
+        <label>Сеттинг<SettingPicker value={sel.setting} pool={settingsPool} onChange={val=>update({setting:val})} allowCreate={false}/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
           <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
@@ -687,7 +795,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   </>;
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false,items=[]}){
+function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onSendToLottery,lotteryTransfer,onConsumeLotteryTransfer}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
@@ -703,10 +811,10 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[]}){
       </div>
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"18px 24px 24px"}}>
-          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items}/></div>
+          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onSendToLottery={onSendToLottery}/></div>
           <div style={{display:activeTool==="offers"?"block":"none"}}><OfferConstructor/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none"}}><LootboxSimulator/></div>
-          <div style={{display:activeTool==="lottery"?"block":"none"}}><LotterySimulator/></div>
+          <div style={{display:activeTool==="lottery"?"block":"none"}}><LotterySimulator pendingTransfer={lotteryTransfer} onConsumeTransfer={onConsumeLotteryTransfer}/></div>
         </div>
       </div>
     </div>
@@ -776,7 +884,7 @@ function TintedIcon({src,className=""}){
   return <span className={`tinted-icon ${className}`} style={{"--icon-image":`url("${src}")`}} aria-hidden="true"/>;
 }
 
-function SettingsPanel({navigation,onChange,onClose,items,onItemsChange}){
+function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settingsList,onSettingsListChange}){
   const [panelMode,setPanelMode]=useState("nav");
   const [sectionId,setSectionId]=useState(()=>navigation[0]?.id);
   const [itemId,setItemId]=useState(null);
@@ -794,7 +902,7 @@ function SettingsPanel({navigation,onChange,onClose,items,onItemsChange}){
   const removeItem=()=>{updateSection({items:section.items.filter(i=>i.id!==item.id)});setItemId(null)};
   const pickIcon=(event,apply)=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>apply({icon:String(reader.result),iconName:file.name});reader.readAsDataURL(file);event.target.value=""};
   const unicodeSymbols=["◇","◆","●","○","■","□","★","☆","✓","⚡","⚙","🔧","📄","📁","📊","📋","🗓","🧩","🎯","🛠","🚀","💡","🔗","🌐","🎮","🎲","💎","🏠","🔔","⏱"];
-  if(panelMode==="catalog")return <div className="settings-page"><ItemCatalogPanel items={items} onItemsChange={onItemsChange} onSwitchMode={()=>setPanelMode("nav")} onClose={onClose}/></div>;
+  if(panelMode==="catalog")return <div className="settings-page"><ItemCatalogPanel items={items} onItemsChange={onItemsChange} onSwitchMode={()=>setPanelMode("nav")} onClose={onClose} settingsList={settingsList} onSettingsListChange={onSettingsListChange}/></div>;
   return <div className="settings-page">
     <aside className="settings-nav">
       <div className="settings-title">Настройки</div>
@@ -867,6 +975,8 @@ function AppShell(){
   const [activeId,setActiveId]=useState(initial.activeId);
   const [navigation,setNavigation]=useState(loadNavigation);
   const [items,setItems]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-items-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
+  const [settingsList,setSettingsList]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-settings-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
+  const [lotteryTransfer,setLotteryTransfer]=useState(null);
   const [selectedSection,setSelectedSection]=useState("dashboard");
   const [showSettings,setShowSettings]=useState(false);
   const [draggingTab,setDraggingTab]=useState(null);
@@ -880,12 +990,14 @@ function AppShell(){
     let cancelled=false;
     (async()=>{
       if(!window.workspaceStore)return;
-      const [savedNavigation,savedWorkspace,savedItems]=await Promise.all([window.workspaceStore.read("navigation"),window.workspaceStore.read("workspace"),window.workspaceStore.read("items")]);
+      const [savedNavigation,savedWorkspace,savedItems,savedSettings]=await Promise.all([window.workspaceStore.read("navigation"),window.workspaceStore.read("workspace"),window.workspaceStore.read("items"),window.workspaceStore.read("settings")]);
       if(cancelled)return;
       if(Array.isArray(savedNavigation)&&savedNavigation.length)setNavigation(normalizeNavigation(savedNavigation));
       else await window.workspaceStore.write("navigation",navigation);
       if(Array.isArray(savedItems))setItems(savedItems);
       else await window.workspaceStore.write("items",items);
+      if(Array.isArray(savedSettings))setSettingsList(savedSettings);
+      else await window.workspaceStore.write("settings",settingsList);
       if(savedWorkspace?.tabs?.length){const migrated=migrateWorkspace(savedWorkspace);setTabs(migrated.tabs);setActiveId(migrated.activeId)}
       else await window.workspaceStore.write("workspace",{tabs,activeId});
       setStoreReady(true);
@@ -895,6 +1007,7 @@ function AppShell(){
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-workspace-v2",JSON.stringify({tabs,activeId}))}catch{/* Electron file storage remains authoritative */}window.workspaceStore?.write("workspace",{tabs,activeId}).catch(console.error)},[tabs,activeId,storeReady]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-navigation-v1",JSON.stringify(navigation))}catch{/* selected images can exceed the browser quota */}window.workspaceStore?.write("navigation",navigation).catch(console.error)},[navigation,storeReady]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-items-v1",JSON.stringify(items))}catch{/* selected images can exceed the browser quota */}window.workspaceStore?.write("items",items).catch(console.error)},[items,storeReady]);
+  useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-settings-v1",JSON.stringify(settingsList))}catch{/* ignore quota */}window.workspaceStore?.write("settings",settingsList).catch(console.error)},[settingsList,storeReady]);
   useEffect(()=>setTabs(prev=>prev.map(tab=>{for(const section of navigation){const item=section.items.find(i=>i.id===(tab.sourceItemId||tab.page));if(item)return{...tab,title:item.label,url:item.url||tab.url,section:section.id,icon:item.icon||null,tabIcon:item.tabIcon||tab.tabIcon}}return tab})),[navigation]);
 
   const openPage=(page,tabIcon)=>{
@@ -902,6 +1015,11 @@ function AppShell(){
     setTabs(prev=>prev.some(t=>t.id===id)?prev:[...prev,{id,type:"page",page,title:PAGE_TITLES[page],tabIcon}]);
     setActiveId(id);
   };
+  const sendToLottery=item=>{
+    setLotteryTransfer({tag:item.tag,name:effectiveName(item),ts:Date.now()});
+    openPage("lottery");
+  };
+  const consumeLotteryTransfer=()=>setLotteryTransfer(null);
   const openIn=(url,title,section=selectedSection,sourceItemId=null,tabIcon=null,icon=null)=>{
     const existing=tabs.find(t=>t.type==="web"&&(sourceItemId?t.sourceItemId===sourceItemId:t.title===title));
     if(existing){setActiveId(existing.id);return}
@@ -928,7 +1046,7 @@ function AppShell(){
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
     if(tab.page==="events")return <EventCalendar/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector items={items}/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onSendToLottery={sendToLottery} lotteryTransfer={lotteryTransfer} onConsumeLotteryTransfer={consumeLotteryTransfer}/>;
   };
 
   return <div className="desktop-app">
@@ -956,7 +1074,7 @@ function AppShell(){
           {tabs.map(tab=><div key={tab.id} className={tab.id===activeId?"tab-surface active":"tab-surface"}>{renderTab(tab)}</div>)}
           {!activeId&&<div className="empty-workspace"><div>{["configs","boards","files"].includes(selectedSection)?"Выбери файл":"Выбери страницу"}</div></div>}
         </div>
-        {showSettings&&<SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>setShowSettings(false)} items={items} onItemsChange={setItems}/>}
+        {showSettings&&<SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>setShowSettings(false)} items={items} onItemsChange={setItems} settingsList={settingsList} onSettingsListChange={setSettingsList}/>}
       </section>
     </main>
   </div>;

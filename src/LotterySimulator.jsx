@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a293",DNG="#ff5d55";
 
@@ -267,7 +267,7 @@ const superChestItems=()=>[
   mkItem("Gems","421",700,1,0),
 ];
 
-export default function LotterySimulator(){
+export default function LotterySimulator({pendingTransfer,onConsumeTransfer}){
   const initChests=()=>{
     const c1={id:uid(),name:"Small Chest",keyCost:10};
     const c2={id:uid(),name:"Medium Chest",keyCost:50};
@@ -294,6 +294,15 @@ export default function LotterySimulator(){
       return {...prev,[chestId]:next};
     });
   };
+
+  useEffect(()=>{
+    if(!pendingTransfer||!chestId)return;
+    setChestItems(prev=>{
+      const cur=prev[chestId]||[];
+      return {...prev,[chestId]:[...cur,mkItem(pendingTransfer.tag||pendingTransfer.name||"","",1,0,0)]};
+    });
+    onConsumeTransfer?.();
+  },[pendingTransfer]);
 
   const switchChest=(id)=>{setActiveChestId(id);setResults(null);setSingleLog(null);setBalanceResult(null)};
   const copyItemsFrom=(srcId)=>{
