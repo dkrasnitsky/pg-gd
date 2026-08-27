@@ -186,6 +186,68 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
 
 function iconLibraryDir(){return path.join(__dirname,"..","dist","icons-items")}
 
+async function runPendingImport(){
+  const importPath=path.join(__dirname,"..","import-enriched.json");
+  let queued;
+  try{
+    queued=JSON.parse(await fs.promises.readFile(importPath,"utf8"));
+  }catch(error){
+    if(error.code==="ENOENT")return;
+    throw error;
+  }
+  if(!Array.isArray(queued)||!queued.length)return;
+
+  let existing=[];
+  try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
+  const existingTags=new Set(existing.map(item=>String(item.tag||"").toLowerCase()).filter(Boolean));
+  const toAdd=queued.filter(entry=>entry.tag&&!existingTags.has(String(entry.tag).toLowerCase()));
+  console.log(`[import] queued ${queued.length}, new ${toAdd.length}, skipped duplicates ${queued.length-toAdd.length}`);
+  if(!toAdd.length){await fs.promises.rename(importPath,`${importPath}.done`);return}
+
+  const lookup=new Map();
+  try{
+    const accessToken=await getGoogleAccessToken();
+    const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
+    const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+    const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===tierSheetGid);
+    if(sheet){
+      const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+      const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:J`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+      const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
+      for(const row of valuesResponse.values||[]){
+        const key=String(row[0]??"").trim().toLowerCase();
+        if(key&&!lookup.has(key))lookup.set(key,{type:clean(row[2]),rarity:clean(row[3]),tier:clean(row[5])});
+      }
+      console.log(`[import] loaded ${lookup.size} rows from Weapon Analytics`);
+    }else{
+      console.error("[import] Weapon Analytics sheet with the configured gid was not found; tier/type/rarity left blank");
+    }
+  }catch(error){
+    console.error("[import] could not reach Weapon Analytics, tier/type/rarity left blank",error);
+  }
+
+  let uidSeed=Date.now();
+  const created=toAdd.map(entry=>{
+    const info=lookup.get(String(entry.tag||"").toLowerCase())||{};
+    return {
+      uid:`item-${uidSeed++}`,
+      id:entry.id||"",parts:entry.parts||"",tag:entry.tag||"",name:entry.name||"",
+      type:"Weapon",rarity:"",setting:"",lastSale:"",saleLocation:"",
+      tier:info.tier||"",sheetType:info.type||"",sheetRarity:info.rarity||"",
+      icon:entry.icon||"",
+    };
+  });
+
+  const merged=[...existing,...created];
+  const target=storePath("items");
+  const temporary=`${target}.${process.pid}.${Date.now()}.import.tmp`;
+  await fs.promises.mkdir(path.dirname(target),{recursive:true});
+  await fs.promises.writeFile(temporary,JSON.stringify(merged),"utf8");
+  await fs.promises.rename(temporary,target);
+  await fs.promises.rename(importPath,`${importPath}.done`);
+  console.log(`[import] done: added ${created.length} items (total now ${merged.length})`);
+}
+
 ipcMain.handle("icons:list",async()=>{
   try{
     const files=await fs.promises.readdir(iconLibraryDir());
@@ -278,7 +340,10 @@ async function createWindow(){
   await win.loadURL(`http://127.0.0.1:${port}`);
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async()=>{
+  await createWindow();
+  runPendingImport().catch(error=>console.error("[import] failed",error));
+});
 ipcMain.on("window:minimize",event=>BrowserWindow.fromWebContents(event.sender)?.minimize());
 ipcMain.on("window:toggle-maximize",event=>{const win=BrowserWindow.fromWebContents(event.sender);if(!win)return;win.isMaximized()?win.unmaximize():win.maximize()});
 ipcMain.on("window:close",event=>BrowserWindow.fromWebContents(event.sender)?.close());
