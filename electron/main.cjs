@@ -121,7 +121,12 @@ ipcMain.handle("google:create-lottery-config",async(_event,title)=>{
   const names=templates.map(template=>`${base}${template.suffix}`);
   const conflicts=names.filter(name=>sheets.has(name));
   if(conflicts.length)throw new Error(`Листы уже существуют: ${conflicts.join(", ")}`);
-  await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:templates.map((template,index)=>({duplicateSheet:{sourceSheetId:sheets.get(template.source).sheetId,newSheetName:names[index]}}))})});
+  const duplicateResponse=await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:templates.map((template,index)=>({duplicateSheet:{sourceSheetId:sheets.get(template.source).sheetId,newSheetName:names[index]}}))})});
+  const newSheetIds=(duplicateResponse.replies||[]).map(reply=>reply.duplicateSheet?.properties?.sheetId).filter(id=>id!==undefined);
+  if(newSheetIds.length===templates.length){
+    const baseIndex=(spreadsheet.sheets||[]).length;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:newSheetIds.map((sheetId,index)=>({updateSheetProperties:{properties:{sheetId,index:baseIndex+index},fields:"index"}}))})});
+  }
   return{names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${lotterySpreadsheetId}/edit`};
 });
 
