@@ -310,10 +310,9 @@ function ItemCard({item,onOpen}){
   );
 }
 
-function ItemDetail({item,onClose,onSendToLottery}){
+function ItemDetail({item,onClose,onOpenLottery}){
   const rarity=rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
-  const [sent,setSent]=useState(false);
   const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]];
   if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
@@ -324,7 +323,7 @@ function ItemDetail({item,onClose,onSendToLottery}){
           <ItemImage src={item.icon} size={256}/>
           <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
-            {onSendToLottery&&<button type="button" className={sent?"ghost-action":"primary-action"} onClick={()=>{onSendToLottery(item);setSent(true);setTimeout(()=>setSent(false),1500)}}>{sent?"Отправлено ✓":"Отправить в Lottery Simulator"}</button>}
+            {onOpenLottery&&<button type="button" className="primary-action" onClick={()=>onOpenLottery()}>Lottery</button>}
           </div>
         </div>
         <div className="form-columns">
@@ -392,7 +391,7 @@ function RangeFilterDropdown({label,from,to,onFromChange,onToChange,align="left"
   );
 }
 
-function ContentPicker({items=[],settingsList=[],onSendToLottery}){
+function ContentPicker({items=[],settingsList=[],onOpenLottery}){
   const [query,setQuery]=useState("");
   const [typeFilter,setTypeFilter]=useState(()=>new Set());
   const [rarityFilter,setRarityFilter]=useState(()=>new Set());
@@ -408,6 +407,9 @@ function ContentPicker({items=[],settingsList=[],onSendToLottery}){
   const tierPool=useMemo(()=>[...new Set(items.map(i=>i.tier).filter(Boolean))].sort(),[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
   const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0||lethalityFrom!==""||lethalityTo!=="";
+  const resetAll=()=>{
+    setQuery("");setTypeFilter(new Set());setRarityFilter(new Set());setTierFilter(new Set());setSettingFilter(new Set());setLethalityFrom("");setLethalityTo("");
+  };
   const filtered=useMemo(()=>{
     if(!hasActiveSearch)return [];
     const q=query.trim().toLowerCase();
@@ -436,8 +438,8 @@ function ContentPicker({items=[],settingsList=[],onSendToLottery}){
   },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,lethalityFrom,lethalityTo,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
-      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onSendToLottery={onSendToLottery}/>}
-      <div style={{position:"sticky",top:0,zIndex:25,background:BG,marginTop:-18,marginLeft:-24,marginRight:-24,paddingTop:18,paddingLeft:24,paddingRight:24,paddingBottom:14}}>
+      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onOpenLottery={onOpenLottery}/>}
+      <div style={{position:"sticky",top:0,zIndex:25,background:BG,marginLeft:-24,marginRight:-24,paddingTop:18,paddingLeft:24,paddingRight:24,paddingBottom:14}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           <button className="primary-action">Поиск</button>
@@ -446,6 +448,7 @@ function ContentPicker({items=[],settingsList=[],onSendToLottery}){
           <FilterDropdown label="тир" options={tierPool} selected={tierFilter} onToggle={v=>toggle(setTierFilter,v)}/>
           <RangeFilterDropdown label="летальность" from={lethalityFrom} to={lethalityTo} onFromChange={setLethalityFrom} onToChange={setLethalityTo}/>
           <FilterDropdown label="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)} align="right"/>
+          {hasActiveSearch&&<button type="button" onClick={resetAll} className="ghost-action" style={{whiteSpace:"nowrap",color:DNG,borderColor:DNG}}>✕ сбросить</button>}
         </div>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
@@ -795,7 +798,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   </>;
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onSendToLottery,lotteryTransfer,onConsumeLotteryTransfer}){
+function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
@@ -810,11 +813,11 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
         </div>}
       </div>
       <div style={{flex:1,position:"relative"}}>
-        <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"18px 24px 24px"}}>
-          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onSendToLottery={onSendToLottery}/></div>
-          <div style={{display:activeTool==="offers"?"block":"none"}}><OfferConstructor/></div>
-          <div style={{display:activeTool==="lootbox"?"block":"none"}}><LootboxSimulator/></div>
-          <div style={{display:activeTool==="lottery"?"block":"none"}}><LotterySimulator pendingTransfer={lotteryTransfer} onConsumeTransfer={onConsumeLotteryTransfer}/></div>
+        <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"0 24px 24px"}}>
+          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery}/></div>
+          <div style={{display:activeTool==="offers"?"block":"none",paddingTop:18}}><OfferConstructor/></div>
+          <div style={{display:activeTool==="lootbox"?"block":"none",paddingTop:18}}><LootboxSimulator/></div>
+          <div style={{display:activeTool==="lottery"?"block":"none",paddingTop:18}}><LotterySimulator/></div>
         </div>
       </div>
     </div>
@@ -976,7 +979,6 @@ function AppShell(){
   const [navigation,setNavigation]=useState(loadNavigation);
   const [items,setItems]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-items-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
   const [settingsList,setSettingsList]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-settings-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
-  const [lotteryTransfer,setLotteryTransfer]=useState(null);
   const [selectedSection,setSelectedSection]=useState("dashboard");
   const [showSettings,setShowSettings]=useState(false);
   const [draggingTab,setDraggingTab]=useState(null);
@@ -1015,11 +1017,9 @@ function AppShell(){
     setTabs(prev=>prev.some(t=>t.id===id)?prev:[...prev,{id,type:"page",page,title:PAGE_TITLES[page],tabIcon}]);
     setActiveId(id);
   };
-  const sendToLottery=item=>{
-    setLotteryTransfer({tag:item.tag,name:effectiveName(item),ts:Date.now()});
+  const openLottery=()=>{
     openPage("lottery");
   };
-  const consumeLotteryTransfer=()=>setLotteryTransfer(null);
   const openIn=(url,title,section=selectedSection,sourceItemId=null,tabIcon=null,icon=null)=>{
     const existing=tabs.find(t=>t.type==="web"&&(sourceItemId?t.sourceItemId===sourceItemId:t.title===title));
     if(existing){setActiveId(existing.id);return}
@@ -1046,7 +1046,7 @@ function AppShell(){
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
     if(tab.page==="events")return <EventCalendar/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onSendToLottery={sendToLottery} lotteryTransfer={lotteryTransfer} onConsumeLotteryTransfer={consumeLotteryTransfer}/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery}/>;
   };
 
   return <div className="desktop-app">

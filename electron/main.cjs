@@ -15,7 +15,6 @@ const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
 const weaponGeneratorPath="Z:\\pg3d\\Assets\\Scripts\\Item\\Generated\\ItemConverterId_clientToIndex.cs";
-const SALE_SITE_HEADERS=[["Lottery","Lottery"],["CardRoulette","CardRoulette"],["AdsRoulette","AdsRoulette"],["TopUp","PersonalEvent"],["TraderVan","TraderVan"],["Offers","Offer"],["PixelPass","PixelPass"],["Signature","TemplateEvent"]];
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
 const jiraEmail="d.krasnitsky@cubicgames.com";
 const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
@@ -185,29 +184,12 @@ async function fetchWeaponAnalytics(accessToken){
   return lookup;
 }
 
-function sheetSerialToIso(serial){
-  const ms=Math.round((serial-25569)*86400*1000);
-  const d=new Date(ms);
-  return Number.isNaN(d.getTime())?null:d.toISOString().slice(0,10);
-}
-
-function parseSheetCellDate(value){
-  if(value===undefined||value===null||value==="")return null;
-  if(typeof value==="number")return sheetSerialToIso(value);
-  const text=String(value).trim();
-  let m=text.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/);
-  if(m){let[,d,mo,y]=m;if(y.length===2)y="20"+y;return `${y.padStart(4,"0")}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`}
-  m=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(m)return text;
-  return null;
-}
-
 async function fetchNamesAndSaleDates(accessToken){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===nameSheetGid);
-  const names=new Map();const sales=new Map();
-  if(!sheet)return {names,sales};
+  const names=new Map();
+  if(!sheet)return {names};
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
   const headerResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:AZ1`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   const header=(headerResp.values&&headerResp.values[0])||[];
@@ -215,12 +197,7 @@ async function fetchNamesAndSaleDates(accessToken){
   header.forEach((h,i)=>{const key=String(h||"").trim().toLowerCase();if(key&&!headerMap.has(key))headerMap.set(key,i)});
   const tagCol=headerMap.has("tag")?headerMap.get("tag"):0;
   const nameCol=headerMap.has("name")?headerMap.get("name"):1;
-  const siteCols=[];
-  for(const [siteHeader,siteKey] of SALE_SITE_HEADERS){
-    const col=headerMap.get(siteHeader.toLowerCase());
-    if(col!==undefined)siteCols.push({siteKey,dateCol:col+1});
-  }
-  const maxCol=Math.max(tagCol,nameCol,...siteCols.map(s=>s.dateCol),0);
+  const maxCol=Math.max(tagCol,nameCol,0);
   const range=`${quotedTitle}!A2:${colLetter(maxCol)}100000`;
   const dataResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(range)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   for(const row of dataResp.values||[]){
@@ -229,14 +206,8 @@ async function fetchNamesAndSaleDates(accessToken){
     const key=tag.toLowerCase();
     const name=String(row[nameCol]??"").trim();
     if(name&&!names.has(key))names.set(key,name);
-    let best=null;
-    for(const {siteKey,dateCol} of siteCols){
-      const iso=parseSheetCellDate(row[dateCol]);
-      if(iso&&(!best||iso>best.date))best={date:iso,site:siteKey};
-    }
-    if(best&&!sales.has(key))sales.set(key,best);
   }
-  return {names,sales};
+  return {names};
 }
 
 function extractDictionaryBody(text,funcName){
@@ -320,14 +291,14 @@ async function runWeaponAutoSync(){
   let allItems=[...existing,...createdItems];
 
   let analytics=new Map();
-  let sheetInfo={names:new Map(),sales:new Map()};
+  let sheetInfo={names:new Map()};
   try{
     const accessToken=await getGoogleAccessToken();
     analytics=await fetchWeaponAnalytics(accessToken);
     sheetInfo=await fetchNamesAndSaleDates(accessToken);
-    console.log(`[sync] Weapon Analytics: ${analytics.size} rows; name/sale sheet: ${sheetInfo.names.size} names, ${sheetInfo.sales.size} sale dates`);
+    console.log(`[sync] Weapon Analytics: ${analytics.size} rows; name sheet: ${sheetInfo.names.size} names`);
   }catch(error){
-    console.error("[sync] could not reach Google Sheets this run; tier/type/rarity/name/sale left unchanged",error.message||error);
+    console.error("[sync] could not reach Google Sheets this run; tier/type/rarity/name left unchanged",error.message||error);
   }
 
   allItems=allItems.map(item=>{
@@ -348,8 +319,6 @@ async function runWeaponAutoSync(){
     }
     const name=sheetInfo.names.get(key);
     if(name!==undefined)patch.sheetName=name;
-    const sale=sheetInfo.sales.get(key);
-    if(sale){patch.lastSale=sale.date;patch.saleLocation=sale.site}
     return Object.keys(patch).length?{...item,...patch}:item;
   });
 
