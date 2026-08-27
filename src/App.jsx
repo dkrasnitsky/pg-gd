@@ -107,7 +107,7 @@ function iv(item,qty){return item.unit ? qty/item.unit : qty*item.price}
 
 let _offerIdCounter=4;
 
-const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel"];
+const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Primary","Backup","Melee","Special","Sniper","Premium"];
 const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
 const SALE_LOCATIONS=["Lottery","CardRoulette","PersonalEvent","TemplateEvent","Offer","PixelPass"];
 const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",PersonalEvent:"Personal Event",TemplateEvent:"Template Event",Offer:"Offer",PixelPass:"Pixel Pass"};
@@ -330,15 +330,31 @@ function ItemDetail({item,onClose}){
   );
 }
 
-function FilterGroup({title,options,selected,onToggle}){
+function FilterDropdown({label,options,selected,onToggle}){
+  const [open,setOpen]=useState(false);
+  const boxRef=useRef(null);
+  useEffect(()=>{
+    if(!open)return;
+    const onDocClick=e=>{if(boxRef.current&&!boxRef.current.contains(e.target))setOpen(false)};
+    document.addEventListener("mousedown",onDocClick);
+    return()=>document.removeEventListener("mousedown",onDocClick);
+  },[open]);
   return (
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:10,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:6}}>{title}</div>
-      {options.map(o=>(
-        <label key={o} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12,color:selected.has(o)?A:T1,cursor:"pointer"}}>
-          <input type="checkbox" checked={selected.has(o)} onChange={()=>onToggle(o)} style={{accentColor:A}}/>{typeof title==="string"&&title==="Сеттинг"?o:o}
-        </label>
-      ))}
+    <div ref={boxRef} style={{position:"relative",flexShrink:0}}>
+      <button type="button" onClick={()=>setOpen(v=>!v)} className={selected.size?"primary-action":"ghost-action"} style={{whiteSpace:"nowrap"}}>
+        {label}{selected.size>0?` (${selected.size})`:""}
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,minWidth:190,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+          {options.length===0&&<div style={{fontSize:11,color:T2,padding:"2px 4px"}}>Нет значений</div>}
+          {options.map(o=>(
+            <div key={o} onClick={()=>onToggle(o)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer",whiteSpace:"nowrap"}}>
+              <input type="checkbox" checked={selected.has(o)} onChange={()=>onToggle(o)} onClick={e=>e.stopPropagation()} style={{width:14,height:14,flexShrink:0,accentColor:A,margin:0}}/>
+              <span style={{flex:1,textAlign:"left",fontSize:12,fontWeight:400,textTransform:"none",color:selected.has(o)?A:T1}}>{o}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -347,15 +363,16 @@ function ContentPicker({items=[]}){
   const [query,setQuery]=useState("");
   const [typeFilter,setTypeFilter]=useState(()=>new Set());
   const [rarityFilter,setRarityFilter]=useState(()=>new Set());
+  const [tierFilter,setTierFilter]=useState(()=>new Set());
   const [settingFilter,setSettingFilter]=useState(()=>new Set());
-  const [showFilters,setShowFilters]=useState(false);
   const [openItem,setOpenItem]=useState(null);
   const settingsPool=useMemo(()=>{
     const all=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
     return [...new Set(all)].sort();
   },[items]);
+  const tierPool=useMemo(()=>[...new Set(items.map(i=>i.tier).filter(Boolean))].sort(),[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
-  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||settingFilter.size>0;
+  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0;
   const filtered=useMemo(()=>{
     if(!hasActiveSearch)return [];
     const q=query.trim().toLowerCase();
@@ -364,37 +381,30 @@ function ContentPicker({items=[]}){
         const hay=[it.id,it.parts,it.tag,it.name].map(v=>String(v??"").toLowerCase());
         if(!hay.some(v=>v.includes(q)))return false;
       }
-      if(typeFilter.size&&!typeFilter.has(it.type))return false;
+      if(typeFilter.size&&!typeFilter.has(it.type)&&!typeFilter.has(it.sheetType))return false;
       if(rarityFilter.size&&!rarityFilter.has(effectiveRarity(it)))return false;
+      if(tierFilter.size&&!tierFilter.has(it.tier))return false;
       if(settingFilter.size){
         const itemSettings=String(it.setting||"").split(",").map(s=>s.trim()).filter(Boolean);
         if(!itemSettings.some(s=>settingFilter.has(s)))return false;
       }
       return true;
     });
-  },[items,query,typeFilter,rarityFilter,settingFilter,hasActiveSearch]);
+  },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
       {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)}/>}
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
         <button className="primary-action">Поиск</button>
-        <button className={showFilters?"primary-action":"ghost-action"} onClick={()=>setShowFilters(v=>!v)} style={{width:38,padding:0}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke={showFilters?"#292929":T1} strokeWidth="2" strokeLinecap="round"/></svg>
-        </button>
+        <FilterDropdown label="тип" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
+        <FilterDropdown label="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
+        <FilterDropdown label="тир" options={tierPool} selected={tierFilter} onToggle={v=>toggle(setTierFilter,v)}/>
+        <FilterDropdown label="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)}/>
       </div>
-      <div style={{display:"flex",gap:14}}>
-        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
-          {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>{hasActiveSearch?"Ничего не найдено":"Начните поиск или выберите фильтр, чтобы увидеть предметы"}</div>}
-          {filtered.map(it=><ItemCard key={it.uid} item={it} onOpen={setOpenItem}/>)}
-        </div>
-        {showFilters&&(
-          <div style={{width:200,flexShrink:0,background:STRIPE,border:`1px solid ${BRD}`,borderRadius:2,padding:14,maxHeight:520,overflowY:"auto"}}>
-            <FilterGroup title="тип предмета" options={ITEM_TYPES} selected={typeFilter} onToggle={v=>toggle(setTypeFilter,v)}/>
-            <FilterGroup title="редкость" options={ITEM_RARITIES} selected={rarityFilter} onToggle={v=>toggle(setRarityFilter,v)}/>
-            {settingsPool.length>0&&<FilterGroup title="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)}/>}
-          </div>
-        )}
+      <div style={{display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
+        {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>{hasActiveSearch?"Ничего не найдено":"Начните поиск или выберите фильтр, чтобы увидеть предметы"}</div>}
+        {filtered.map(it=><ItemCard key={it.uid} item={it} onOpen={setOpenItem}/>)}
       </div>
     </div>
   );
