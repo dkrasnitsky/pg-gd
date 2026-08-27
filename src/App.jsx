@@ -355,7 +355,9 @@ function ContentPicker({items=[]}){
     return [...new Set(all)].sort();
   },[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
+  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||settingFilter.size>0;
   const filtered=useMemo(()=>{
+    if(!hasActiveSearch)return [];
     const q=query.trim().toLowerCase();
     return items.filter(it=>{
       if(q){
@@ -370,7 +372,7 @@ function ContentPicker({items=[]}){
       }
       return true;
     });
-  },[items,query,typeFilter,rarityFilter,settingFilter]);
+  },[items,query,typeFilter,rarityFilter,settingFilter,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
       {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)}/>}
@@ -383,7 +385,7 @@ function ContentPicker({items=[]}){
       </div>
       <div style={{display:"flex",gap:14}}>
         <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:10,alignContent:"flex-start"}}>
-          {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>Ничего не найдено</div>}
+          {filtered.length===0&&<div style={{color:T2,fontSize:12,padding:20}}>{hasActiveSearch?"Ничего не найдено":"Начните поиск или выберите фильтр, чтобы увидеть предметы"}</div>}
           {filtered.map(it=><ItemCard key={it.uid} item={it} onOpen={setOpenItem}/>)}
         </div>
         {showFilters&&(
@@ -558,6 +560,50 @@ function IconLibraryPicker({onSelect,onClose}){
   );
 }
 
+function SettingPicker({value,pool,onChange}){
+  const [open,setOpen]=useState(false);
+  const [draft,setDraft]=useState("");
+  const boxRef=useRef(null);
+  const selected=useMemo(()=>new Set(String(value||"").split(",").map(s=>s.trim()).filter(Boolean)),[value]);
+  useEffect(()=>{
+    if(!open)return;
+    const onDocClick=e=>{if(boxRef.current&&!boxRef.current.contains(e.target))setOpen(false)};
+    document.addEventListener("mousedown",onDocClick);
+    return()=>document.removeEventListener("mousedown",onDocClick);
+  },[open]);
+  const commit=next=>onChange([...next].join(", "));
+  const toggle=name=>{const next=new Set(selected);next.has(name)?next.delete(name):next.add(name);commit(next)};
+  const addNew=()=>{
+    const name=draft.trim();
+    if(!name)return;
+    const next=new Set(selected);
+    next.add(name);
+    commit(next);
+    setDraft("");
+  };
+  return (
+    <div ref={boxRef} style={{position:"relative"}}>
+      <button type="button" onClick={()=>setOpen(v=>!v)} style={{width:"100%",textAlign:"left",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:selected.size?T1:T2,fontSize:13,padding:"9px 12px",cursor:"pointer"}}>
+        {selected.size?[...selected].join(", "):"Выбрать сеттинг…"}
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:10,maxHeight:240,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+          {pool.length===0&&<div style={{fontSize:11,color:T2,marginBottom:8}}>Пока нет сеттингов</div>}
+          {pool.map(name=>(
+            <label key={name} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",fontSize:12,color:selected.has(name)?A:T1,cursor:"pointer"}}>
+              <input type="checkbox" checked={selected.has(name)} onChange={()=>toggle(name)} style={{accentColor:A}}/>{name}
+            </label>
+          ))}
+          <div style={{display:"flex",gap:6,marginTop:8,borderTop:`1px solid ${BRD}`,paddingTop:8}}>
+            <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addNew()}}} placeholder="новый сеттинг…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+            <button type="button" onClick={addNew} className="icon-upload">+ New</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const [selId,setSelId]=useState(null);
   const [tierStatus,setTierStatus]=useState("");
@@ -565,6 +611,10 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
   const [libraryOpen,setLibraryOpen]=useState(false);
   const iconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
+  const settingsPool=useMemo(()=>{
+    const all=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
+    return [...new Set(all)].sort();
+  },[items]);
   const visibleItems=useMemo(()=>{
     const q=listQuery.trim().toLowerCase();
     if(!q)return items;
@@ -609,7 +659,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose}){
         </div>
         <label>Tag (для поиска и подтягивания tier)<input value={sel.tag} onChange={e=>update({tag:e.target.value})} onBlur={refreshTier} placeholder="совпадает с колонкой E в Weapon Analytics"/></label>
         <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
-        <label>Сеттинг<input value={sel.setting} onChange={e=>update({setting:e.target.value})} placeholder="например, Winter, Chinese — через запятую"/></label>
+        <label>Сеттинг<SettingPicker value={sel.setting} pool={settingsPool} onChange={val=>update({setting:val})}/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
           <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
