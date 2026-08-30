@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a293",DNG="#ff5d55";
 
@@ -318,6 +318,39 @@ export default function LotterySimulator(){
   const [singleLog,setSingleLog]=useState(null);
   const [lotteryName,setLotteryName]=useState("");
   const [buildState,setBuildState]=useState({status:"idle",message:""});
+  const [savedBalances,setSavedBalances]=useState([]);
+
+  useEffect(()=>{
+    window.workspaceStore?.read("lotteryBalances").then(list=>{if(Array.isArray(list))setSavedBalances(list)}).catch(()=>{});
+  },[]);
+
+  const saveBalance=async()=>{
+    const name=lotteryName.trim();
+    if(!name){setBuildState({status:"error",message:"Введите название для сохранения баланса"});return}
+    const exists=savedBalances.some(b=>b.name===name);
+    if(exists&&!window.confirm(`Баланс «${name}» уже существует. Перезаписать?`))return;
+    const snapshot={name,chests:Object.fromEntries(chests.map(c=>[c.name,(chestItems[c.id]||[]).map(({id,...rest})=>rest)]))};
+    const next=exists?savedBalances.map(b=>b.name===name?snapshot:b):[...savedBalances,snapshot];
+    setSavedBalances(next);
+    try{
+      await window.workspaceStore?.write("lotteryBalances",next);
+      setBuildState({status:"success",message:`Баланс «${name}» сохранён`});
+    }catch(e){setBuildState({status:"error",message:"Не удалось сохранить: "+e.message})}
+  };
+  const loadBalance=(name)=>{
+    const balance=savedBalances.find(b=>b.name===name);
+    if(!balance)return;
+    setChestItems(prev=>{
+      const next={...prev};
+      chests.forEach(c=>{
+        const saved=balance.chests[c.name];
+        if(saved)next[c.id]=saved.map(item=>({...item,id:uid()}));
+      });
+      return next;
+    });
+    setLotteryName(name);
+    setBuildState({status:"idle",message:""});
+  };
 
   const upItem=(id,f,v)=>setItems(p=>p.map(i=>i.id===id?{...i,[f]:v}:i));
   const upItemNum=(id,f,v)=>upItem(id,f,Math.max(0,Number(v)||0));
@@ -376,8 +409,15 @@ export default function LotterySimulator(){
     <div style={card}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <span style={{fontSize:13,fontWeight:600,color:T1}}>Сундуки</span>
-        <In value={lotteryName} onChange={v=>{setLotteryName(v);setBuildState({status:"idle",message:""})}} style={{width:220,fontSize:12}} placeholder="Название листа лотереи"/>
+        <In value={lotteryName} onChange={v=>{setLotteryName(v);setBuildState({status:"idle",message:""})}} style={{width:200,fontSize:12}} placeholder="Название листа/баланса"/>
+        <button onClick={saveBalance} style={{...pill,background:"transparent",color:T1,border:`1px solid ${BRD}`}}>Сохранить</button>
         <button onClick={buildConfig} disabled={buildState.status==="loading"} style={{...pill,opacity:buildState.status==="loading"?.55:1,cursor:buildState.status==="loading"?"wait":"pointer"}}>{buildState.status==="loading"?"Собираю…":"Собрать конфиг"}</button>
+        {savedBalances.length>0&&(
+          <select onChange={e=>{if(e.target.value)loadBalance(e.target.value);e.target.value=""}} defaultValue="" style={{fontSize:11,color:T1,padding:"6px 10px",background:BG,border:`1px solid ${BRD}`,borderRadius:2,cursor:"pointer",outline:"none"}}>
+            <option value="">Сохранённые балансы…</option>
+            {savedBalances.map(b=><option key={b.name} value={b.name}>{b.name}</option>)}
+          </select>
+        )}
         <button onClick={addChest} style={pill}>+ сундук</button>
       </div>
       {buildState.message&&<div className={`config-status ${buildState.status}`} style={{margin:"0 0 10px"}}>{buildState.message}</div>}

@@ -1,7 +1,7 @@
 {
   "name": "pg3d-dashboard",
   "private": true,
-  "version": "2.0.25",
+  "version": "2.0.26",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -34,7 +34,7 @@
     "appId": "com.pg3d.workspace",
     "productName": "PG3D Workspace",
     "directories": {
-      "output": "release-v38"
+      "output": "release-v39"
     },
     "files": [
       "dist/**/*",

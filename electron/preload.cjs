@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   createLotteryConfig: (title) => ipcRenderer.invoke("google:create-lottery-config", title),
   buildLotteryConfig: (sheetName, items) => ipcRenderer.invoke("google:build-lottery-config", sheetName, items),
   fetchTier: (tag) => ipcRenderer.invoke("google:fetch-tier", tag),
+  getNextLotteryId: () => ipcRenderer.invoke("google:get-next-lottery-id"),
+  getSegments: () => ipcRenderer.invoke("google:get-segments"),
+  applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
 });
 
 contextBridge.exposeInMainWorld("iconLibrary", {

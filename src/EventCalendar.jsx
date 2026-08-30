@@ -9,6 +9,92 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const ROW_HEIGHT=52;
 const TOP_PADDING=18;
 
+function LotteryConfigurator({event,onClose,onSave}){
+  const [partitions,setPartitions]=useState(()=>{
+    if(event.lotteryConfig?.partitions?.length)return event.lotteryConfig.partitions;
+    return [{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",style:"",segment:"",startDateTime:`${event.start}T${event.startTime||"10:00"}`,endDateTime:`${event.end}T${event.endTime||"10:00"}`,balanceName:""}];
+  });
+  const [segments,setSegments]=useState([]);
+  const [balances,setBalances]=useState([]);
+  const [status,setStatus]=useState({state:"idle",message:""});
+  const [idLoading,setIdLoading]=useState(false);
+
+  useEffect(()=>{
+    window.workspaceGoogle?.getSegments().then(list=>{if(Array.isArray(list))setSegments(list)}).catch(()=>{});
+    window.workspaceStore?.read("lotteryBalances").then(list=>{if(Array.isArray(list))setBalances(list)}).catch(()=>{});
+  },[]);
+
+  useEffect(()=>{
+    setPartitions(prev=>{
+      if(prev.length!==1||prev[0].id)return prev;
+      setIdLoading(true);
+      window.workspaceGoogle?.getNextLotteryId().then(nextId=>{
+        if(nextId)setPartitions(cur=>cur.map((p,i)=>i===0&&!p.id?{...p,id:String(nextId)}:p));
+      }).catch(()=>{}).finally(()=>setIdLoading(false));
+      return prev;
+    });
+  },[]);
+
+  const updatePartition=(uid,patch)=>setPartitions(prev=>prev.map(p=>p.uid===uid?{...p,...patch}:p));
+  const addPartition=()=>setPartitions(prev=>[...prev,{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",style:"",segment:"",startDateTime:prev[0]?.startDateTime||"",endDateTime:prev[0]?.endDateTime||"",balanceName:""}]);
+  const removePartition=uid=>setPartitions(prev=>prev.filter(p=>p.uid!==uid));
+
+  const saveDraft=()=>{onSave({partitions});onClose()};
+
+  const apply=async(target)=>{
+    setStatus({state:"loading",message:`Создаём конфиг${target==="test"?" (ТЕСТ)":""}…`});
+    const results=[];
+    for(const partition of partitions){
+      const balance=balances.find(b=>b.name===partition.balanceName);
+      const balanceItems=balance?Object.values(balance.chests).flat().map(item=>({containerId:item.label,itemId:item.group,count:item.drop,dropChance:item.weight})):[];
+      try{
+        const result=await window.workspaceGoogle?.applyLotteryPartition({
+          name:partition.name,id:partition.id,style:partition.style,segment:partition.segment,
+          startDateTime:partition.startDateTime?`${partition.startDateTime}:00`:"",
+          endDateTime:partition.endDateTime?`${partition.endDateTime}:00`:"",
+          balanceItems,target,
+        });
+        results.push(`✓ ${partition.name}: ${result.names.join(", ")}`);
+      }catch(error){
+        results.push(`✗ ${partition.name}: ${error.message||"ошибка"}`);
+      }
+    }
+    onSave({partitions});
+    setStatus({state:results.some(r=>r.startsWith("✗"))?"error":"success",message:results.join("\n")});
+  };
+
+  return (
+    <div className="event-modal-backdrop" style={{position:"fixed",zIndex:60}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="event-modal" style={{width:"min(720px,100%)",maxHeight:"90vh",overflowY:"auto"}}>
+        <header><div><span>LOTTERY CONFIG</span><h2>{event.title}</h2></div><button onClick={onClose}><FiX/></button></header>
+        {partitions.map((p,index)=>(
+          <div key={p.uid} style={{border:"1px solid #59645b",borderRadius:2,padding:12,marginBottom:12,position:"relative"}}>
+            {partitions.length>1&&<button type="button" onClick={()=>removePartition(p.uid)} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",color:"#ff5d55",cursor:"pointer"}}><FiTrash2/></button>}
+            <label>Name<input value={p.name} onChange={e=>updatePartition(p.uid,{name:e.target.value})}/></label>
+            <div className="form-columns">
+              <label>Id{index===0&&idLoading?" (загрузка…)":""}<input value={p.id} onChange={e=>updatePartition(p.uid,{id:e.target.value})} placeholder={index>0?"впишите вручную":""}/></label>
+              <label>style<input value={p.style} onChange={e=>updatePartition(p.uid,{style:e.target.value})}/></label>
+            </div>
+            <label>segment<select value={p.segment} onChange={e=>updatePartition(p.uid,{segment:e.target.value})}><option value="">—</option>{segments.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
+            <div className="form-columns">
+              <label>start date-time<input type="datetime-local" value={p.startDateTime} onChange={e=>updatePartition(p.uid,{startDateTime:e.target.value})}/></label>
+              <label>end date-time<input type="datetime-local" value={p.endDateTime} onChange={e=>updatePartition(p.uid,{endDateTime:e.target.value})}/></label>
+            </div>
+            <label>lottery balance<select value={p.balanceName} onChange={e=>updatePartition(p.uid,{balanceName:e.target.value})}><option value="">—</option>{balances.map(b=><option key={b.name} value={b.name}>{b.name}</option>)}</select></label>
+          </div>
+        ))}
+        <button type="button" className="secondary-action" onClick={addPartition} style={{marginBottom:12}}><FiPlus/></button>
+        {status.message&&<div className={`config-status ${status.state}`} style={{whiteSpace:"pre-line"}}>{status.message}</div>}
+        <footer>
+          <button className="primary-action" onClick={saveDraft}>Ок</button>
+          <button className="secondary-action" disabled={status.state==="loading"} onClick={()=>apply("prod")}>Создать конфиг</button>
+          <button className="secondary-action" disabled={status.state==="loading"} onClick={()=>apply("test")}>Создать конфиг ТЕСТ</button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 export default function EventCalendar(){
   const today=new Date();
   const [cursor,setCursor]=useState(new Date(today.getFullYear(),today.getMonth(),1));
@@ -17,6 +103,7 @@ export default function EventCalendar(){
   const [ready,setReady]=useState(false);
   const [gesture,setGesture]=useState(null);
   const [configState,setConfigState]=useState({status:"idle",message:""});
+  const [showConfigurator,setShowConfigurator]=useState(false);
   const days=useMemo(()=>Array.from({length:new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate()},(_,index)=>new Date(cursor.getFullYear(),cursor.getMonth(),index+1)),[cursor]);
   const monthStart=iso(days[0]),monthEnd=iso(days[days.length-1]);
   const visible=events.filter(event=>event.end>=monthStart&&event.start<=monthEnd);
@@ -32,15 +119,11 @@ export default function EventCalendar(){
   const update=patch=>setEvents(current=>current.map(event=>event.id===selectedId?{...event,...patch}:event));
   const remove=()=>{if(!selected)return;setEvents(current=>current.filter(event=>event.id!==selectedId));setSelectedId(null)};
   const duplicate=()=>{if(!selected)return;const lane=visible.reduce((max,event,index)=>Math.max(max,Number.isInteger(event.lane)?event.lane:index),-1)+1;const copy={...selected,id:`event-${Date.now()}`,title:`${selected.title} — копия`,lane};setEvents(current=>[...current,copy]);setSelectedId(copy.id)};
-  const createConfig=async()=>{
+  const createConfig=()=>{
     if(!selected)return;
-    if(selected.type!=="Lottery"){setConfigState({status:"error",message:"Создание конфига пока доступно только для типа Lottery"});return}
-    setConfigState({status:"loading",message:"Создаём листы в Google Sheets…"});
-    try{
-      const result=await window.workspaceGoogle?.createLotteryConfig(selected.title);
-      if(!result)throw new Error("Функция доступна только в настольном приложении");
-      setConfigState({status:"success",message:`Созданы листы: ${result.names.join(", ")}`});
-    }catch(error){setConfigState({status:"error",message:error.message||"Не удалось создать конфиг"})}
+    if(selected.type!=="Lottery"){setConfigState({status:"error",message:"Настройка пока доступна только для типа Lottery"});return}
+    setConfigState({status:"idle",message:""});
+    setShowConfigurator(true);
   };
   const changeMonth=delta=>setCursor(current=>new Date(current.getFullYear(),current.getMonth()+delta,1));
   const beginGesture=(event,item,mode,lane)=>{event.stopPropagation();const width=event.currentTarget.closest(".calendar-timeline").getBoundingClientRect().width;setGesture({id:item.id,mode,x:event.clientX,y:event.clientY,width,start:item.start,end:item.end,lane,deltaX:0,deltaY:0})};
@@ -55,6 +138,7 @@ export default function EventCalendar(){
         {!visible.length&&<button className="calendar-empty" onClick={()=>createAt(days[Math.floor(days.length/2)])}><FiPlus/>Добавить первый ивент</button>}
       </div>
     </div>
-    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header><label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>{configState.status==="loading"?"Создание…":"Создать конфиг"}</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
+    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header><label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>Настроить</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
+    {showConfigurator&&selected&&<LotteryConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({lotteryConfig:cfg})}/>}
   </div>;
 }

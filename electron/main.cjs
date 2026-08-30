@@ -8,9 +8,17 @@ const path = require("node:path");
 let localServer;
 let mainWindow;
 const workspacePartition="persist:pg3d-workspace";
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
+const lotteryTestSpreadsheetId="10s8UQTOfFupR3afkyU0nmvKo_crLPjREHFTolesQK54";
+const lotteryScheduleGid=2053899668;
+const lotteryTestScheduleGid=1485566542;
+const eventCenterSpreadsheetId="1tIXmTByMu6TRlyn7t-5hJHdCB__70M6DbSbvMItefL0";
+const eventCenterTestSpreadsheetId="1ZNXorevxFq6Tlxbr9FjljuQXzM9jCv7KuIt7jbHz_uE";
+const eventCenterLotteryGid=450520332;
+const eventCenterTestLotteryGid=1724060786;
+const segmentsSheetGid=1297452825;
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
@@ -108,11 +116,10 @@ async function sheetsRequest(accessToken,url,options={}){
   return body;
 }
 
-ipcMain.handle("google:create-lottery-config",async(_event,title)=>{
-  const base=String(title||"").replace(/\s+/g,"");
-  if(!base)throw new Error("Укажите название элемента");
-  const accessToken=await getGoogleAccessToken();
-  const api=`https://sheets.googleapis.com/v4/spreadsheets/${lotterySpreadsheetId}`;
+function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
+
+async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const templates=[{source:"Chest",suffix:"Chest"},{source:"GameRewards",suffix:"Rewards"},{source:"InappsCurrency",suffix:"Currency"}];
   const sheets=new Map((spreadsheet.sheets||[]).map(sheet=>[sheet.properties.title,sheet.properties]));
@@ -127,10 +134,10 @@ ipcMain.handle("google:create-lottery-config",async(_event,title)=>{
     const baseIndex=(spreadsheet.sheets||[]).length;
     await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:newSheetIds.map((sheetId,index)=>({updateSheetProperties:{properties:{sheetId,index:baseIndex+index},fields:"index"}}))})});
   }
-  return{names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${lotterySpreadsheetId}/edit`};
-});
+  return names;
+}
 
-ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
+async function buildLotteryConfigInSheet(accessToken,spreadsheetId,sheetName,items){
   const title=String(sheetName||"").trim();
   if(!title)throw new Error("Введите название листа с лотереей");
   if(!Array.isArray(items)||!items.length)throw new Error("В симуляторе нет данных для записи");
@@ -139,8 +146,7 @@ ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
   const duplicateIds=normalized.map(item=>item.containerId).filter((id,index,all)=>all.indexOf(id)!==index);
   if(duplicateIds.length)throw new Error(`ID повторяются в симуляторе: ${[...new Set(duplicateIds)].join(", ")}`);
 
-  const accessToken=await getGoogleAccessToken();
-  const api=`https://sheets.googleapis.com/v4/spreadsheets/${lotterySpreadsheetId}`;
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.title===title);
   if(!sheet)throw new Error(`Лист «${title}» не найден`);
@@ -158,19 +164,129 @@ ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
   const missing=normalized.filter(item=>!rowByContainer.has(item.containerId)).map(item=>item.containerId);
   if(missing.length)throw new Error(`На листе не найдены container_id: ${missing.join(", ")}`);
 
-  const columnName=index=>{let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name};
   const data=[];
   for(const item of normalized){
     const row=rowByContainer.get(item.containerId);
-    data.push({range:`${quotedTitle}!${columnName(columns.item_id)}${row}`,values:[[item.itemId]]});
-    data.push({range:`${quotedTitle}!${columnName(columns.count)}${row}`,values:[[item.count]]});
-    data.push({range:`${quotedTitle}!${columnName(columns.drop_chance)}${row}`,values:[[item.dropChance]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.item_id)}${row}`,values:[[item.itemId]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.count)}${row}`,values:[[item.count]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.drop_chance)}${row}`,values:[[item.dropChance]]});
   }
   await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
   return{updated:normalized.length,sheetName:title};
+}
+
+async function appendScheduleRow(accessToken,spreadsheetId,scheduleGid,values){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===scheduleGid);
+  if(!sheet)throw new Error("Лист Schedule не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const headerResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:Z1`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const header=(headerResp.values&&headerResp.values[0])||[];
+  const row=header.map(h=>{
+    const key=String(h||"").trim().toLowerCase();
+    if((key==="start"||key==="end")&&values[key]){
+      const serial=toSheetsSerial(values[key]);
+      if(serial!==null)return serial;
+    }
+    return values[key]!==undefined?values[key]:"";
+  });
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A:A`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[row]})});
+}
+
+function toSheetsSerial(dateTimeStr){
+  const m=String(dateTimeStr||"").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+  if(!m)return null;
+  const [,y,mo,d,h,mi,s]=m.slice(1).map(Number);
+  const ms=Date.UTC(y,mo-1,d,h,mi,s);
+  return ms/86400000+25569;
+}
+
+async function appendLotteryRow(accessToken,spreadsheetId,lotteryGid,overrides){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===lotteryGid);
+  if(!sheet)throw new Error("Лист Lottery не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const allResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=allResp.values||[];
+  if(rows.length<2)throw new Error("На листе Lottery нет строк для копирования");
+  const lastRow=[...rows[rows.length-1]];
+  while(lastRow.length<8)lastRow.push("");
+  lastRow[2]=overrides.id;
+  lastRow[3]=overrides.startDateTime;
+  lastRow[4]=overrides.endDateTime;
+  lastRow[5]=overrides.segment;
+  lastRow[7]=overrides.style;
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
+}
+
+ipcMain.handle("google:create-lottery-config",async(_event,title)=>{
+  const base=String(title||"").replace(/\s+/g,"");
+  if(!base)throw new Error("Укажите название элемента");
+  const accessToken=await getGoogleAccessToken();
+  const names=await duplicateLotteryTemplateSheets(accessToken,lotterySpreadsheetId,base);
+  return{names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${lotterySpreadsheetId}/edit`};
 });
 
-function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
+ipcMain.handle("google:build-lottery-config",async(_event,sheetName,items)=>{
+  const accessToken=await getGoogleAccessToken();
+  return buildLotteryConfigInSheet(accessToken,lotterySpreadsheetId,sheetName,items);
+});
+
+ipcMain.handle("google:get-next-lottery-id",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${lotterySpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===lotteryScheduleGid);
+  if(!sheet)throw new Error("Лист Schedule не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const headerResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:Z1`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const header=(headerResp.values&&headerResp.values[0])||[];
+  const idx=header.findIndex(h=>String(h||"").trim().toLowerCase()==="uniqueid");
+  if(idx<0)throw new Error("Колонка UniqueId не найдена на листе Schedule");
+  const colResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!${colLetter(idx)}2:${colLetter(idx)}100000`)}?majorDimension=COLUMNS&valueRenderOption=UNFORMATTED_VALUE`);
+  const col=(colResp.values&&colResp.values[0])||[];
+  let last=null;
+  for(const v of col){const n=Number(v);if(Number.isFinite(n))last=n}
+  return (last!==null?last:2162)+1;
+});
+
+ipcMain.handle("google:get-segments",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${eventCenterSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===segmentsSheetGid);
+  if(!sheet)return [];
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const resp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!B2:B10000`)}?majorDimension=COLUMNS&valueRenderOption=UNFORMATTED_VALUE`);
+  const col=(resp.values&&resp.values[0])||[];
+  return [...new Set(col.map(v=>String(v||"").trim()).filter(Boolean))];
+});
+
+ipcMain.handle("google:apply-lottery-partition",async(_event,partition)=>{
+  const {name,id,style,segment,startDateTime,endDateTime,balanceItems,target}=partition||{};
+  const cleanName=String(name||"").replace(/\s+/g,"");
+  if(!cleanName)throw new Error("Укажите Name");
+  if(!id)throw new Error("Укажите Id");
+  const isTest=target==="test";
+  const lotterySpId=isTest?lotteryTestSpreadsheetId:lotterySpreadsheetId;
+  const scheduleGid=isTest?lotteryTestScheduleGid:lotteryScheduleGid;
+  const eventCenterSpId=isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId;
+  const lotteryGid=isTest?eventCenterTestLotteryGid:eventCenterLotteryGid;
+
+  const accessToken=await getGoogleAccessToken();
+  const names=await duplicateLotteryTemplateSheets(accessToken,lotterySpId,cleanName);
+  await appendScheduleRow(accessToken,lotterySpId,scheduleGid,{
+    name:cleanName,id:style||"",available:false,start:startDateTime||"",end:endDateTime||"",
+    startcurrency:0,minlevel:3,uniqueid:id,eventtype:"EventChests",
+  });
+  await appendLotteryRow(accessToken,eventCenterSpId,lotteryGid,{id,style:style||"",segment:segment||"",startDateTime:startDateTime||"",endDateTime:endDateTime||""});
+  if(Array.isArray(balanceItems)&&balanceItems.length){
+    await buildLotteryConfigInSheet(accessToken,lotterySpId,names[0],balanceItems);
+  }
+  return {names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${lotterySpId}/edit`};
+});
 
 async function fetchWeaponAnalytics(accessToken){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${tierSpreadsheetId}`;
