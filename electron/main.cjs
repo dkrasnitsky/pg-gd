@@ -120,7 +120,7 @@ function colLetter(index){let value=index+1,name="";while(value>0){value--;name=
 
 async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
-  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title,index)`);
   const templates=[{source:"Chest",suffix:"Chest"},{source:"GameRewards",suffix:"Rewards"},{source:"InappsCurrency",suffix:"Currency"}];
   const sheets=new Map((spreadsheet.sheets||[]).map(sheet=>[sheet.properties.title,sheet.properties]));
   const missing=templates.filter(template=>!sheets.has(template.source)).map(template=>template.source);
@@ -131,7 +131,8 @@ async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base){
   const duplicateResponse=await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:templates.map((template,index)=>({duplicateSheet:{sourceSheetId:sheets.get(template.source).sheetId,newSheetName:names[index]}}))})});
   const newSheetIds=(duplicateResponse.replies||[]).map(reply=>reply.duplicateSheet?.properties?.sheetId).filter(id=>id!==undefined);
   if(newSheetIds.length===templates.length){
-    const baseIndex=(spreadsheet.sheets||[]).length;
+    const anchor=(spreadsheet.sheets||[]).find(entry=>entry.properties.title==="EggsAndPets");
+    const baseIndex=anchor?anchor.properties.index+1:0;
     await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:newSheetIds.map((sheetId,index)=>({updateSheetProperties:{properties:{sheetId,index:baseIndex+index},fields:"index"}}))})});
   }
   return names;
@@ -191,7 +192,7 @@ async function appendScheduleRow(accessToken,spreadsheetId,scheduleGid,values){
     }
     return values[key]!==undefined?values[key]:"";
   });
-  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A:A`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[row]})});
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[row]})});
 }
 
 function toSheetsSerial(dateTimeStr){
