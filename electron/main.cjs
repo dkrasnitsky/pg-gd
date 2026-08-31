@@ -176,31 +176,21 @@ async function buildLotteryConfigInSheet(accessToken,spreadsheetId,sheetName,ite
   return{updated:normalized.length,sheetName:title};
 }
 
-async function appendScheduleRow(accessToken,spreadsheetId,scheduleGid,values){
+async function appendScheduleRow(accessToken,spreadsheetId,scheduleGid,overrides){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===scheduleGid);
   if(!sheet)throw new Error("Лист Schedule не найден");
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-  const headerResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:Z1`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
-  const header=(headerResp.values&&headerResp.values[0])||[];
-  const row=header.map(h=>{
-    const key=String(h||"").trim().toLowerCase();
-    if((key==="start"||key==="end")&&values[key]){
-      const serial=toSheetsSerial(values[key]);
-      if(serial!==null)return serial;
-    }
-    return values[key]!==undefined?values[key]:"";
-  });
-  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[row]})});
-}
-
-function toSheetsSerial(dateTimeStr){
-  const m=String(dateTimeStr||"").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
-  if(!m)return null;
-  const [,y,mo,d,h,mi,s]=m.slice(1).map(Number);
-  const ms=Date.UTC(y,mo-1,d,h,mi,s);
-  return ms/86400000+25569;
+  const allResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=allResp.values||[];
+  if(rows.length<2)throw new Error("На листе Schedule нет строк для копирования");
+  const lastRow=[...rows[rows.length-1]];
+  while(lastRow.length<8)lastRow.push("");
+  lastRow[0]=overrides.name;
+  lastRow[1]=overrides.style;
+  lastRow[7]=overrides.uniqueId;
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
 }
 
 async function appendLotteryRow(accessToken,spreadsheetId,lotteryGid,overrides){
@@ -278,10 +268,7 @@ ipcMain.handle("google:apply-lottery-partition",async(_event,partition)=>{
 
   const accessToken=await getGoogleAccessToken();
   const names=await duplicateLotteryTemplateSheets(accessToken,lotterySpId,cleanName);
-  await appendScheduleRow(accessToken,lotterySpId,scheduleGid,{
-    name:cleanName,id:style||"",available:false,start:startDateTime||"",end:endDateTime||"",
-    startcurrency:0,minlevel:3,uniqueid:id,eventtype:"EventChests",
-  });
+  await appendScheduleRow(accessToken,lotterySpId,scheduleGid,{name:cleanName,style:style||"",uniqueId:id});
   await appendLotteryRow(accessToken,eventCenterSpId,lotteryGid,{id,style:style||"",segment:segment||"",startDateTime:startDateTime||"",endDateTime:endDateTime||""});
   if(Array.isArray(balanceItems)&&balanceItems.length){
     await buildLotteryConfigInSheet(accessToken,lotterySpId,names[0],balanceItems);
