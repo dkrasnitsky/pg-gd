@@ -323,7 +323,7 @@ function ItemDetail({item,onClose,onOpenLottery}){
           <ItemImage src={item.icon} size={256}/>
           <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
-            {onOpenLottery&&<button type="button" className="primary-action" onClick={()=>onOpenLottery()}>Lottery</button>}
+            {onOpenLottery&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenLottery()}}>Lottery</button>}
           </div>
         </div>
         <div className="form-columns">
@@ -351,7 +351,7 @@ function FilterDropdown({label,options,selected,onToggle,align="left"}){
         {label}{selected.size>0?` (${selected.size})`:""}
       </button>
       {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,minWidth:190,maxWidth:260,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,minWidth:190,maxWidth:260,maxHeight:320,overflowY:"auto",overscrollBehavior:"contain",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
           {options.length===0&&<div style={{fontSize:11,color:T2,padding:"2px 4px"}}>Нет значений</div>}
           {options.map(o=>(
             <div key={o} onClick={()=>onToggle(o)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer"}}>
@@ -646,7 +646,7 @@ function SettingPicker({value,pool,onChange,allowCreate=true}){
         {selected.size?[...selected].join(", "):"Выбрать сеттинг…"}
       </button>
       {open&&(
-        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:8,maxHeight:320,overflowY:"auto",overscrollBehavior:"contain",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
           {pool.length===0&&<div style={{fontSize:11,color:T2,marginBottom:8}}>Пока нет сеттингов</div>}
           {pool.map(name=>(
             <div key={name} onClick={()=>toggle(name)} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 2px",cursor:"pointer"}}>
