@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import LootboxSimulator from "./LootboxSimulator";
 import TimeTracker from "./TimeTracker";
 import LotterySimulator from "./LotterySimulator";
@@ -784,10 +784,10 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <div className="settings-list">{groupedByType.map(([type,groupItems])=>{
         const collapsed=collapsedTypes.has(type);
         return (
-          <div key={type}>
+          <Fragment key={type}>
             <GroupHeader label={type} count={groupItems.length} collapsed={collapsed} onToggle={()=>toggleType(type)}/>
             {!collapsed&&groupItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{effectiveName(i)||"Без названия"}</span><FiChevronRight/></button>)}
-          </div>
+          </Fragment>
         );
       })}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
     </aside>
@@ -931,26 +931,19 @@ function GroupsManager({groups=[],onGroupsChange,items=[],onItemsChange}){
     onItemsChange((items||[]).map(it=>it.groupId===id?{...it,groupId:null}:it));
   };
   return (
-    <div style={{marginBottom:12,padding:10,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2}}>
-      <div style={{fontSize:10,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>Группы</div>
-      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8,maxHeight:160,overflowY:"auto"}}>
-        {(groups||[]).length===0&&<div style={{fontSize:11,color:T2}}>Пока нет групп</div>}
-        {(groups||[]).map(g=>(
-          <div key={g.id} style={{display:"flex",alignItems:"center",gap:6}}>
-            {renaming===g.id?(
-              <input autoFocus value={renameDraft} onChange={e=>setRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitRename(g.id);if(e.key==="Escape")setRenaming(null)}} onBlur={()=>commitRename(g.id)} style={{flex:1,background:"#111",border:`1px solid ${A}`,borderRadius:2,color:T1,fontSize:12,padding:"3px 6px",outline:"none"}}/>
-            ):(
-              <span style={{flex:1,fontSize:12,color:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.label}</span>
-            )}
-            <button type="button" onClick={()=>{setRenaming(g.id);setRenameDraft(g.label)}} title="Переименовать" style={{background:"transparent",border:"none",color:T2,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✎</button>
-            <button type="button" onClick={()=>removeGroup(g.id)} title="удалить" style={{background:"transparent",border:"none",color:DNG,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✕</button>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:6}}>
-        <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addGroup()}}} placeholder="новая группа…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-        <button type="button" onClick={addGroup} className="icon-upload">+ New</button>
-      </div>
+    <div className="settings-card">
+      <label>Новая группа<div style={{display:"flex",gap:8}}><input style={{flex:1}} value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addGroup()}}} placeholder="Название группы"/><button type="button" onClick={addGroup} className="icon-upload">Добавить</button></div></label>
+      {(groups||[]).length>0&&<div className="settings-items">{(groups||[]).map(g=>(
+        <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 14px"}}>
+          {renaming===g.id?(
+            <input autoFocus value={renameDraft} onChange={e=>setRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitRename(g.id);if(e.key==="Escape")setRenaming(null)}} onBlur={()=>commitRename(g.id)} style={{flex:1}}/>
+          ):(
+            <b style={{flex:1,color:T1,fontSize:13}}>{g.label}</b>
+          )}
+          <button type="button" onClick={()=>{setRenaming(g.id);setRenameDraft(g.label)}} className="icon-upload">Переименовать</button>
+          <button type="button" onClick={()=>removeGroup(g.id)} className="icon-upload" style={{color:DNG}}>Удалить</button>
+        </div>
+      ))}</div>}
     </div>
   );
 }
@@ -1160,10 +1153,10 @@ function AppShell(){
               const groupItems=byGroup.get(g.id)||[];
               const collapsed=collapsedGroups.has(g.id);
               return (
-                <div key={g.id}>
+                <Fragment key={g.id}>
                   <GroupHeader label={g.label} count={groupItems.length} collapsed={collapsed} onToggle={()=>toggleGroup(g.id)}/>
                   {!collapsed&&groupItems.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>)}
-                </div>
+                </Fragment>
               );
             })}
             {ungrouped.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>)}
