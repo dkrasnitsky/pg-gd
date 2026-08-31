@@ -730,6 +730,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   const [tierStatus,setTierStatus]=useState("");
   const [listQuery,setListQuery]=useState("");
   const [libraryOpen,setLibraryOpen]=useState(false);
+  const [collapsedTypes,setCollapsedTypes]=useState(()=>new Set());
+  const toggleType=type=>setCollapsedTypes(prev=>{const next=new Set(prev);next.has(type)?next.delete(type):next.add(type);return next});
   const iconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
   const settingsPool=useMemo(()=>{
@@ -741,6 +743,16 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
     if(!q)return items;
     return items.filter(i=>[i.name,i.sheetName,i.id,i.tag].some(v=>String(v??"").toLowerCase().includes(q)));
   },[items,listQuery]);
+  const groupedByType=useMemo(()=>{
+    const map=new Map();
+    visibleItems.forEach(i=>{
+      const key=i.type||"Без типа";
+      if(!map.has(key))map.set(key,[]);
+      map.get(key).push(i);
+    });
+    const ordered=[...ITEM_TYPES.filter(t=>map.has(t)),...[...map.keys()].filter(k=>!ITEM_TYPES.includes(k))];
+    return ordered.map(type=>[type,map.get(type)]);
+  },[visibleItems]);
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
@@ -769,7 +781,15 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <SettingsManager settingsList={settingsList} onSettingsListChange={onSettingsListChange} items={items} onItemsChange={onItemsChange}/>
       <input value={listQuery} onChange={e=>setListQuery(e.target.value)} placeholder="Поиск по названию, id или tag…" style={{width:"100%",boxSizing:"border-box",marginBottom:8,padding:"8px 10px",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,outline:"none"}}/>
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
-      <div className="settings-list">{visibleItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{effectiveName(i)||"Без названия"}</span><FiChevronRight/></button>)}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
+      <div className="settings-list">{groupedByType.map(([type,groupItems])=>{
+        const collapsed=collapsedTypes.has(type);
+        return (
+          <div key={type}>
+            <GroupHeader label={type} count={groupItems.length} collapsed={collapsed} onToggle={()=>toggleType(type)}/>
+            {!collapsed&&groupItems.map(i=><button key={i.uid} className={i.uid===selId?"active":""} onClick={()=>setSelId(i.uid)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span>{effectiveName(i)||"Без названия"}</span><FiChevronRight/></button>)}
+          </div>
+        );
+      })}{visibleItems.length===0&&<div style={{padding:"10px 4px",color:T2,fontSize:11}}>Ничего не найдено</div>}</div>
     </aside>
     <section className="settings-editor">
       <header><div><span>Каталог предметов</span><h2>{sel?effectiveName(sel)||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
@@ -887,6 +907,66 @@ function TintedIcon({src,className=""}){
   return <span className={`tinted-icon ${className}`} style={{"--icon-image":`url("${src}")`}} aria-hidden="true"/>;
 }
 
+function GroupsManager({groups=[],onGroupsChange,items=[],onItemsChange}){
+  const [newName,setNewName]=useState("");
+  const [renaming,setRenaming]=useState(null);
+  const [renameDraft,setRenameDraft]=useState("");
+  const addGroup=()=>{
+    const label=newName.trim();
+    if(!label)return;
+    onGroupsChange([...(groups||[]),{id:`group-${Date.now()}`,label}]);
+    setNewName("");
+  };
+  const commitRename=id=>{
+    const label=renameDraft.trim();
+    setRenaming(null);
+    if(!label)return;
+    onGroupsChange((groups||[]).map(g=>g.id===id?{...g,label}:g));
+  };
+  const removeGroup=id=>{
+    const g=(groups||[]).find(x=>x.id===id);
+    if(!g)return;
+    if(!window.confirm(`Удалить группу «${g.label}»? Элементы останутся, но станут без группы.`))return;
+    onGroupsChange((groups||[]).filter(x=>x.id!==id));
+    onItemsChange((items||[]).map(it=>it.groupId===id?{...it,groupId:null}:it));
+  };
+  return (
+    <div style={{marginBottom:12,padding:10,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2}}>
+      <div style={{fontSize:10,color:T2,textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:8}}>Группы</div>
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8,maxHeight:160,overflowY:"auto"}}>
+        {(groups||[]).length===0&&<div style={{fontSize:11,color:T2}}>Пока нет групп</div>}
+        {(groups||[]).map(g=>(
+          <div key={g.id} style={{display:"flex",alignItems:"center",gap:6}}>
+            {renaming===g.id?(
+              <input autoFocus value={renameDraft} onChange={e=>setRenameDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitRename(g.id);if(e.key==="Escape")setRenaming(null)}} onBlur={()=>commitRename(g.id)} style={{flex:1,background:"#111",border:`1px solid ${A}`,borderRadius:2,color:T1,fontSize:12,padding:"3px 6px",outline:"none"}}/>
+            ):(
+              <span style={{flex:1,fontSize:12,color:T1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.label}</span>
+            )}
+            <button type="button" onClick={()=>{setRenaming(g.id);setRenameDraft(g.label)}} title="Переименовать" style={{background:"transparent",border:"none",color:T2,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✎</button>
+            <button type="button" onClick={()=>removeGroup(g.id)} title="удалить" style={{background:"transparent",border:"none",color:DNG,cursor:"pointer",fontSize:12,padding:2,flexShrink:0}}>✕</button>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addGroup()}}} placeholder="новая группа…" style={{flex:1,background:"#111",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+        <button type="button" onClick={addGroup} className="icon-upload">+ New</button>
+      </div>
+    </div>
+  );
+}
+
+function InnerNavButton({item,isActive,onClick}){
+  return <button className={isActive?"inner-button active":"inner-button"} onClick={onClick}>{item.icon?<TintedIcon src={item.icon} className="inner-item-icon"/>:<span className="inner-dot"/>}{item.label}</button>;
+}
+
+function GroupHeader({label,count,collapsed,onToggle}){
+  return (
+    <button type="button" onClick={onToggle} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"transparent",border:"none",color:T2,fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,cursor:"pointer"}}>
+      <span style={{display:"inline-block",transform:collapsed?"rotate(-90deg)":"none",transition:"transform .15s",fontSize:9}}>▾</span>{label}<span style={{marginLeft:"auto",opacity:.6}}>{count}</span>
+    </button>
+  );
+}
+
 function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settingsList,onSettingsListChange}){
   const [panelMode,setPanelMode]=useState("nav");
   const [sectionId,setSectionId]=useState(()=>navigation[0]?.id);
@@ -925,6 +1005,7 @@ function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settings
           {!section.builtIn&&<button className="danger-button" onClick={removeSection}><FiTrash2/>Удалить раздел</button>}
         </div>
         <div className="settings-section-head"><div><h3>Файлы и страницы</h3><span>{section.items.length} элементов</span></div><button onClick={addItem}><FiPlus/>Добавить файл</button></div>
+        <GroupsManager groups={section.groups} onGroupsChange={groups=>updateSection({groups})} items={section.items} onItemsChange={groupedItems=>updateSection({items:groupedItems})}/>
         <div className="settings-items">{section.items.map(i=><button key={i.id} onClick={()=>setItemId(i.id)}>{i.icon?<TintedIcon src={i.icon} className="settings-item-icon"/>:<span className="settings-item-dot"/>}<span><b>{i.label}</b><small>{i.url||"Встроенная страница"}</small></span><FiChevronRight/></button>)}</div>
       </>}
       {item&&<>
@@ -932,6 +1013,7 @@ function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settings
         <div className="settings-card">
           <label>Название<input value={item.label} onChange={e=>updateItem({label:e.target.value})}/></label>
           <label>Ссылка<input value={item.url||""} disabled={!item.url&&section.builtIn} onChange={e=>updateItem({url:e.target.value})} placeholder="https://..."/></label>
+          {section.groups?.length>0&&<label>Группа<select value={item.groupId||""} onChange={e=>updateItem({groupId:e.target.value||null})}><option value="">Без группы</option>{section.groups.map(g=><option key={g.id} value={g.id}>{g.label}</option>)}</select></label>}
           <label>Иконка<div className="icon-field">{item.icon?<TintedIcon src={item.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{item.iconName||(item.icon?"Текущая иконка":"Не выбрана")}</span><button type="button" className="icon-upload" onClick={()=>itemIconInput.current?.click()}>Выбрать изображение</button><input ref={itemIconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={e=>pickIcon(e,updateItem)}/></div></label>
           <label>Мини-иконка вкладки<div className="unicode-field">{item.icon?<div className="tab-icon-linked"><TintedIcon src={item.icon} className="tab-image-icon"/>Используется иконка ссылки</div>:<button type="button" className="unicode-trigger" onClick={()=>setShowSymbols(value=>!value)}><span>{item.tabIcon||getTabIcon(item.label)}</span>Выбрать символ</button>}{showSymbols&&!item.icon&&<div className="unicode-picker">{unicodeSymbols.map(symbol=><button type="button" key={symbol} className={item.tabIcon===symbol?"active":""} onClick={()=>{updateItem({tabIcon:symbol});setShowSymbols(false)}}>{symbol}</button>)}</div>}</div></label>
           {item.url&&<button className="danger-button" onClick={removeItem}><FiTrash2/>Удалить файл</button>}
@@ -982,6 +1064,8 @@ function AppShell(){
   const [selectedSection,setSelectedSection]=useState("dashboard");
   const [showSettings,setShowSettings]=useState(false);
   const [draggingTab,setDraggingTab]=useState(null);
+  const [collapsedGroups,setCollapsedGroups]=useState(()=>new Set());
+  const toggleGroup=id=>setCollapsedGroups(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next});
   const [storeReady,setStoreReady]=useState(!window.workspaceStore);
   const tabsScrollRef=useRef(null);
   const active=tabs.find(t=>t.id===activeId)||tabs[0];
@@ -1058,7 +1142,33 @@ function AppShell(){
       <div className="sidebar-divider"/>
       <div className="section-caption">{navigation.find(s=>s.id===activeSection)?.label||"Содержимое"}</div>
       <div className="inner-nav">
-        {(navigation.find(s=>s.id===activeSection)?.items||[]).map(item=><button key={item.id} className={(active?.page===item.id||active?.title===item.label)&&activeId&&!showSettings?"inner-button active":"inner-button"} onClick={()=>{setShowSettings(false);openSidebarItem(item)}}>{item.icon?<TintedIcon src={item.icon} className="inner-item-icon"/>:<span className="inner-dot"/>}{item.label}</button>)}
+        {(()=>{
+          const activeNavSection=navigation.find(s=>s.id===activeSection);
+          const navItems=activeNavSection?.items||[];
+          const navGroups=activeNavSection?.groups||[];
+          const isActiveItem=item=>(active?.page===item.id||active?.title===item.label)&&activeId&&!showSettings;
+          const handleClick=item=>{setShowSettings(false);openSidebarItem(item)};
+          if(!navGroups.length)return navItems.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>);
+          const byGroup=new Map(navGroups.map(g=>[g.id,[]]));
+          const ungrouped=[];
+          navItems.forEach(item=>{
+            if(item.groupId&&byGroup.has(item.groupId))byGroup.get(item.groupId).push(item);
+            else ungrouped.push(item);
+          });
+          return <>
+            {navGroups.map(g=>{
+              const groupItems=byGroup.get(g.id)||[];
+              const collapsed=collapsedGroups.has(g.id);
+              return (
+                <div key={g.id}>
+                  <GroupHeader label={g.label} count={groupItems.length} collapsed={collapsed} onToggle={()=>toggleGroup(g.id)}/>
+                  {!collapsed&&groupItems.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>)}
+                </div>
+              );
+            })}
+            {ungrouped.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>)}
+          </>;
+        })()}
       </div>
       <div className="sidebar-footer"><span className="status-dot"/><span>Локальное приложение</span><button className={showSettings?"sidebar-settings active":"sidebar-settings"} aria-label="Настройки" onClick={()=>setShowSettings(true)}><FiSettings/></button></div>
     </aside>
