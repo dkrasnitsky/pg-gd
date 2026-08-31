@@ -954,9 +954,12 @@ function InnerNavButton({item,isActive,onClick}){
 
 function GroupHeader({label,count,collapsed,onToggle}){
   return (
-    <button type="button" onClick={onToggle} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:"transparent",border:"none",color:T2,fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,cursor:"pointer"}}>
-      <span style={{display:"inline-block",transform:collapsed?"rotate(-90deg)":"none",transition:"transform .15s",fontSize:9}}>▾</span>{label}<span style={{marginLeft:"auto",opacity:.6}}>{count}</span>
-    </button>
+    <div role="button" tabIndex={0} onClick={onToggle} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onToggle()}}}
+      style={{width:"100%",boxSizing:"border-box",display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"transparent",color:T2,fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,cursor:"pointer",userSelect:"none"}}>
+      <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:16,height:16,flexShrink:0,transform:collapsed?"rotate(-90deg)":"none",transition:"transform .15s",fontSize:15,lineHeight:1,color:T1}}>▾</span>
+      <span style={{flex:1,textAlign:"left"}}>{label}</span>
+      <span style={{opacity:.6,flexShrink:0}}>{count}</span>
+    </div>
   );
 }
 
