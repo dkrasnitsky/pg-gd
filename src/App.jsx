@@ -107,7 +107,7 @@ function iv(item,qty){return item.unit ? qty/item.unit : qty*item.price}
 
 let _offerIdCounter=4;
 
-const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Primary","Backup","Melee","Special","Sniper","Premium"];
+const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Event","Primary","Backup","Melee","Special","Sniper","Premium"];
 const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
 const SALE_LOCATIONS=["Lottery","CardRoulette","AdsRoulette","PersonalEvent","TraderVan","Offer","PixelPass","TemplateEvent"];
 const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",AdsRoulette:"Ads Roulette",PersonalEvent:"Personal Event",TraderVan:"Trader Van",Offer:"Offer",PixelPass:"Pixel Pass",TemplateEvent:"Template Event"};
@@ -289,6 +289,7 @@ function ItemImage({src,size=48}){
 function ItemCard({item,onOpen}){
   const rarity=rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
+  const isEvent=item.type==="Event";
   return (
     <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
@@ -302,9 +303,9 @@ function ItemCard({item,onOpen}){
         </div>
       </div>
       <div style={{fontSize:12,color:T2,display:"flex",flexDirection:"column",gap:4}}>
-        <div>ID: <span style={{color:T1}}>{item.id||"—"}</span></div>
-        <div>Parts: <span style={{color:T1}}>{item.parts||"None"}</span></div>
-        {item.lastSale&&<div style={{display:"flex",alignItems:"center",gap:5}}>Last sale: <span style={{color:T1}}>{fmtItemDate(item.lastSale)}</span>{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12,opacity:.85}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>}
+        <div>{isEvent?"ID валюты":"ID"}: <span style={{color:T1}}>{item.id||"—"}</span></div>
+        {!isEvent&&<div>Parts: <span style={{color:T1}}>{item.parts||"None"}</span></div>}
+        {item.lastSale&&<div style={{display:"flex",alignItems:"center",gap:5}}>{isEvent?"Запуск":"Last sale"}: <span style={{color:T1}}>{fmtItemDate(item.lastSale)}</span>{item.saleLocation&&<span title={SALE_LOCATION_LABEL[item.saleLocation]} style={{fontSize:12,opacity:.85}}>{SALE_LOCATION_GLYPH[item.saleLocation]}</span>}</div>}
       </div>
     </div>
   );
@@ -313,14 +314,20 @@ function ItemCard({item,onOpen}){
 function ItemDetail({item,onClose,onOpenLottery}){
   const rarity=rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
-  const rows=[["ID",item.id||"—"],["Parts",item.parts||"None"],["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]];
-  if(item.lastSale){rows.push(["дата последней продажи",fmtItemDate(item.lastSale)]);rows.push(["место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
+  const isEvent=item.type==="Event";
+  const rows=[[isEvent?"ID валюты":"ID",item.id||"—"]];
+  if(!isEvent)rows.push(["Parts",item.parts||"None"]);
+  rows.push(["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]);
+  if(item.lastSale){rows.push([isEvent?"дата последнего запуска":"дата последней продажи",fmtItemDate(item.lastSale)]);rows.push([isEvent?"тип ивента":"место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal">
         <header><div><span>ITEM DATA</span><h2>{displayName||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",marginBottom:14,flexWrap:"wrap"}}>
-          <ItemImage src={item.icon} size={256}/>
+          <div style={{position:"relative",flexShrink:0}}>
+            <ItemImage src={item.icon} size={256}/>
+            {isEvent&&item.eventIcon&&<img src={item.eventIcon} alt="" style={{position:"absolute",bottom:6,right:6,width:32,height:32,borderRadius:4,border:`1px solid ${BRD}`,background:"#1a1a20",objectFit:"contain"}}/>}
+          </div>
           <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
             {onOpenLottery&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenLottery()}}>Lottery</button>}
@@ -733,6 +740,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   const [collapsedTypes,setCollapsedTypes]=useState(()=>new Set());
   const toggleType=type=>setCollapsedTypes(prev=>{const next=new Set(prev);next.has(type)?next.delete(type):next.add(type);return next});
   const iconInput=useRef(null);
+  const eventIconInput=useRef(null);
   const sel=items.find(i=>i.uid===selId)||null;
   const settingsPool=useMemo(()=>{
     const used=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
@@ -756,11 +764,12 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
-    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:""};
+    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:"",eventIcon:""};
     onItemsChange([...items,created]);setSelId(created.uid);
   };
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
+  const pickEventIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({eventIcon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
   const refreshTier=async()=>{
     if(!sel)return;
     if(!sel.tag){setTierStatus("Укажите tag");return}
@@ -795,18 +804,23 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <header><div><span>Каталог предметов</span><h2>{sel?effectiveName(sel)||"Без названия":"Выберите предмет"}</h2></div><button className="settings-close" aria-label="Закрыть настройки" onClick={onClose}><FiX/></button></header>
       {sel&&<div className="settings-card">
         <label>Название<input value={sel.name} onChange={e=>update({name:e.target.value})} placeholder={sel.sheetName?`${sel.sheetName} (из таблицы)`:"Название"}/></label>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <label>ID<input value={sel.id} onChange={e=>update({id:e.target.value})}/></label>
-          <label>Parts<input value={sel.parts} onChange={e=>update({parts:e.target.value})} placeholder="none"/></label>
-        </div>
+        {sel.type==="Event"?(
+          <label>ID валюты<input value={sel.id} onChange={e=>update({id:e.target.value})}/></label>
+        ):(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <label>ID<input value={sel.id} onChange={e=>update({id:e.target.value})}/></label>
+            <label>Parts<input value={sel.parts} onChange={e=>update({parts:e.target.value})} placeholder="none"/></label>
+          </div>
+        )}
         <label>Tag (для поиска и подтягивания tier)<input value={sel.tag} onChange={e=>update({tag:e.target.value})} onBlur={refreshTier} placeholder="совпадает с колонкой E в Weapon Analytics"/></label>
         <label>Тип<select value={sel.type} onChange={e=>update({type:e.target.value})}>{ITEM_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></label>
         <label>Сеттинг<SettingPicker value={sel.setting} pool={settingsPool} onChange={val=>update({setting:val})} allowCreate={false}/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <label>Дата последней продажи<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
-          <label>Место продажи<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
+          <label>{sel.type==="Event"?"Дата последнего запуска":"Дата последней продажи"}<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
+          <label>{sel.type==="Event"?"Тип ивента":"Место продажи"}<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
         </div>
         <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>setLibraryOpen(true)}>Из библиотеки</button><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Своё изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
+        {sel.type==="Event"&&<label>Иконка 32×32 (только в открытой карточке в Подборе Контента)<div className="icon-field">{sel.eventIcon?<img src={sel.eventIcon} alt="" style={{width:32,height:32,objectFit:"contain",borderRadius:4,background:"#1a1a20"}}/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.eventIcon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>eventIconInput.current?.click()}>Своё изображение</button>{sel.eventIcon&&<button type="button" className="icon-upload" onClick={()=>update({eventIcon:""})}>None</button>}<input ref={eventIconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickEventIcon}/></div></label>}
         {libraryOpen&&<IconLibraryPicker onSelect={path=>{update({icon:path,iconName:""});setLibraryOpen(false)}} onClose={()=>setLibraryOpen(false)}/>}
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier/type/rarity</button>
