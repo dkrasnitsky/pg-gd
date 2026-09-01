@@ -398,6 +398,7 @@ async function runWeaponAutoSync(){
   }));
 
   let allItems=[...existing,...createdItems];
+  allItems=allItems.map(item=>(item.saleLocation==="Lottery"&&!item.lastSale)?{...item,saleLocation:""}:item);
 
   let analytics=new Map();
   let sheetInfo={names:new Map()};

@@ -115,6 +115,11 @@ const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",AdsRoulette:"📺"
 const RARITY_META={Common:{label:"Обычная",color:"#e5e5e5"},Rare:{label:"Редкая",color:"#3b82f6"},Epic:{label:"Эпическая",color:"#fbbf24"},Legendary:{label:"Легендарная",color:"#f97316"},Mythic:{label:"Мифическая",color:"#a855f7"}};
 function effectiveRarity(item){return item?.sheetRarity||item?.rarity||""}
 function effectiveName(item){return item?.name||item?.sheetName||""}
+const WARNING_SETTINGS=["Кланы","Турниры","Anniversary","DLC"];
+function hasWarningSetting(item){
+  const list=String(item?.setting||"").split(",").map(s=>s.trim());
+  return list.some(s=>WARNING_SETTINGS.includes(s));
+}
 function rarityMetaFor(value){const key=Object.keys(RARITY_META).find(k=>k.toLowerCase()===String(value||"").trim().toLowerCase());return key?RARITY_META[key]:null}
 function fmtItemDate(value){if(!value)return "—";const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleDateString("ru-RU",{day:"2-digit",month:"2-digit",year:"2-digit"})}
 
@@ -291,7 +296,8 @@ function ItemCard({item,onOpen}){
   const rarity=isEvent?null:rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
   return (
-    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
+    <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{position:"relative",background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
+      {hasWarningSetting(item)&&<span title="Сеттинг требует внимания" style={{position:"absolute",bottom:8,right:8,fontSize:15,lineHeight:1}}>🚫</span>}
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
         <ItemImage src={item.icon} size={52}/>
         <div style={{flex:1,minWidth:0}}>
@@ -324,6 +330,8 @@ function ItemDetail({item,onClose,onOpenLottery}){
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal">
         <header><div><span>ITEM DATA</span><h2>{displayName||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
+        <div style={{position:"relative"}}>
+        {hasWarningSetting(item)&&<span title="Сеттинг требует внимания" style={{position:"absolute",top:0,right:0,fontSize:18,lineHeight:1}}>🚫</span>}
         <div style={{display:"flex",gap:20,alignItems:"flex-start",marginBottom:14,flexWrap:"wrap"}}>
           <div style={{position:"relative",flexShrink:0}}>
             <ItemImage src={item.icon} size={256}/>
@@ -338,6 +346,7 @@ function ItemDetail({item,onClose,onOpenLottery}){
           {rows.map(([l,v])=>(
             <label key={l}>{l}<input value={v} readOnly/></label>
           ))}
+        </div>
         </div>
       </div>
     </div>
@@ -765,7 +774,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   useEffect(()=>{setTierStatus("")},[selId]);
   const update=patch=>onItemsChange(items.map(i=>i.uid===selId?{...i,...patch}:i));
   const addItem=()=>{
-    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:SALE_LOCATIONS[0],tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:"",eventIcon:""};
+    const created={uid:`item-${Date.now()}`,id:"",parts:"",tag:"",name:"Новый предмет",type:ITEM_TYPES[0],rarity:ITEM_RARITIES[0],setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:"",eventIcon:""};
     onItemsChange([...items,created]);setSelId(created.uid);
   };
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
@@ -818,7 +827,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
         <label>Сеттинг<SettingPicker value={sel.setting} pool={settingsPool} onChange={val=>update({setting:val})} allowCreate={false}/></label>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
           <label>{sel.type==="Event"?"Дата последнего запуска":"Дата последней продажи"}<input type="date" value={sel.lastSale||""} onChange={e=>update({lastSale:e.target.value})}/></label>
-          <label>{sel.type==="Event"?"Тип ивента":"Место продажи"}<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
+          <label>{sel.type==="Event"?"Тип ивента":"Место продажи"}<select value={sel.saleLocation||""} onChange={e=>update({saleLocation:e.target.value})}><option value="">—</option>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
         </div>
         <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>setLibraryOpen(true)}>Из библиотеки</button><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Своё изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
         {sel.type==="Event"&&<label>Иконка 64×64 (только в открытой карточке в Подборе Контента)<div className="icon-field">{sel.eventIcon?<img src={sel.eventIcon} alt="" style={{width:64,height:64,objectFit:"contain",borderRadius:4,background:"#1a1a20"}}/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.eventIcon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>eventIconInput.current?.click()}>Своё изображение</button>{sel.eventIcon&&<button type="button" className="icon-upload" onClick={()=>update({eventIcon:""})}>None</button>}<input ref={eventIconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickEventIcon}/></div></label>}
