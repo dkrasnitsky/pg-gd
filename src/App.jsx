@@ -287,9 +287,9 @@ function ItemImage({src,size=48}){
 }
 
 function ItemCard({item,onOpen}){
-  const rarity=rarityMetaFor(effectiveRarity(item));
-  const displayName=effectiveName(item);
   const isEvent=item.type==="Event";
+  const rarity=isEvent?null:rarityMetaFor(effectiveRarity(item));
+  const displayName=effectiveName(item);
   return (
     <div onDoubleClick={()=>onOpen(item)} title="Двойной клик — подробнее" onMouseEnter={e=>e.currentTarget.style.boxShadow=`6px 6px 0 ${A}`} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"} style={{background:SRF,border:`1px solid ${BRD}`,borderRadius:2,boxShadow:"none",transition:"box-shadow .15s",padding:14,display:"flex",flexDirection:"column",gap:10,cursor:"pointer",width:230,flexShrink:0,userSelect:"none"}}>
       <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
@@ -312,12 +312,13 @@ function ItemCard({item,onOpen}){
 }
 
 function ItemDetail({item,onClose,onOpenLottery}){
-  const rarity=rarityMetaFor(effectiveRarity(item));
-  const displayName=effectiveName(item);
   const isEvent=item.type==="Event";
+  const rarity=isEvent?null:rarityMetaFor(effectiveRarity(item));
+  const displayName=effectiveName(item);
   const rows=[[isEvent?"ID валюты":"ID",item.id||"—"]];
   if(!isEvent)rows.push(["Parts",item.parts||"None"]);
-  rows.push(["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"],["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]);
+  rows.push(["Tag",item.tag||"—"],["тип",item.type||"—"],["сеттинг",item.setting||"—"]);
+  if(!isEvent)rows.push(["tier",item.tier||"—"],["type (Weapon Analytics)",item.sheetType||"—"],["rarity (Weapon Analytics)",item.sheetRarity||"—"],["летальность",item.sheetLethality||"—"],["распространённость",item.sheetPrevalence||"—"]);
   if(item.lastSale){rows.push([isEvent?"дата последнего запуска":"дата последней продажи",fmtItemDate(item.lastSale)]);rows.push([isEvent?"тип ивента":"место продажи",item.saleLocation?SALE_LOCATION_LABEL[item.saleLocation]:"—"])}
   return (
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
@@ -326,11 +327,11 @@ function ItemDetail({item,onClose,onOpenLottery}){
         <div style={{display:"flex",gap:20,alignItems:"flex-start",marginBottom:14,flexWrap:"wrap"}}>
           <div style={{position:"relative",flexShrink:0}}>
             <ItemImage src={item.icon} size={256}/>
-            {isEvent&&item.eventIcon&&<img src={item.eventIcon} alt="" style={{position:"absolute",bottom:6,right:6,width:32,height:32,borderRadius:4,border:`1px solid ${BRD}`,background:"#1a1a20",objectFit:"contain"}}/>}
+            {isEvent&&item.eventIcon&&<img src={item.eventIcon} alt="" style={{position:"absolute",bottom:6,right:6,width:64,height:64,borderRadius:4,border:`1px solid ${BRD}`,background:"#1a1a20",objectFit:"contain"}}/>}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
-            {onOpenLottery&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenLottery()}}>Lottery</button>}
+            {!isEvent&&onOpenLottery&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenLottery()}}>Lottery</button>}
           </div>
         </div>
         <div className="form-columns">
@@ -820,7 +821,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
           <label>{sel.type==="Event"?"Тип ивента":"Место продажи"}<select value={sel.saleLocation} onChange={e=>update({saleLocation:e.target.value})}>{SALE_LOCATIONS.map(s=><option key={s} value={s}>{SALE_LOCATION_LABEL[s]}</option>)}</select></label>
         </div>
         <label>Иконка<div className="icon-field">{sel.icon?<TintedIcon src={sel.icon} className="icon-preview image"/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.icon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>setLibraryOpen(true)}>Из библиотеки</button><button type="button" className="icon-upload" onClick={()=>iconInput.current?.click()}>Своё изображение</button>{sel.icon&&<button type="button" className="icon-upload" onClick={()=>update({icon:""})}>None</button>}<input ref={iconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickIcon}/></div></label>
-        {sel.type==="Event"&&<label>Иконка 32×32 (только в открытой карточке в Подборе Контента)<div className="icon-field">{sel.eventIcon?<img src={sel.eventIcon} alt="" style={{width:32,height:32,objectFit:"contain",borderRadius:4,background:"#1a1a20"}}/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.eventIcon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>eventIconInput.current?.click()}>Своё изображение</button>{sel.eventIcon&&<button type="button" className="icon-upload" onClick={()=>update({eventIcon:""})}>None</button>}<input ref={eventIconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickEventIcon}/></div></label>}
+        {sel.type==="Event"&&<label>Иконка 64×64 (только в открытой карточке в Подборе Контента)<div className="icon-field">{sel.eventIcon?<img src={sel.eventIcon} alt="" style={{width:64,height:64,objectFit:"contain",borderRadius:4,background:"#1a1a20"}}/>:<span className="icon-preview empty">+</span>}<span className="icon-file-name">{sel.eventIcon?"текущая иконка":"None"}</span><button type="button" className="icon-upload" onClick={()=>eventIconInput.current?.click()}>Своё изображение</button>{sel.eventIcon&&<button type="button" className="icon-upload" onClick={()=>update({eventIcon:""})}>None</button>}<input ref={eventIconInput} className="hidden-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pickEventIcon}/></div></label>}
         {libraryOpen&&<IconLibraryPicker onSelect={path=>{update({icon:path,iconName:""});setLibraryOpen(false)}} onClose={()=>setLibraryOpen(false)}/>}
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button type="button" className="icon-upload" onClick={refreshTier}>Обновить tier/type/rarity</button>
