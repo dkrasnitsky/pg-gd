@@ -324,6 +324,8 @@ export default function LotterySimulator(){
   const [buildState,setBuildState]=useState({status:"idle",message:""});
   const [savedBalances,setSavedBalances]=useState([]);
   const [rewardPools,setRewardPools]=useState([]);
+  const [renaming,setRenaming]=useState(false);
+  const [renameValue,setRenameValue]=useState("");
 
   useEffect(()=>{
     window.workspaceGoogle?.getRewardPools().then(list=>{if(Array.isArray(list))setRewardPools(list)}).catch(()=>{});
@@ -353,7 +355,15 @@ export default function LotterySimulator(){
       const next={...prev};
       chests.forEach(c=>{
         const saved=balance.chests[c.name];
-        if(saved)next[c.id]=saved.map(item=>({...item,id:uid()}));
+        if(saved)next[c.id]=saved.map(item=>({
+          ...item,
+          id:uid(),
+          category:item.category||"Gun",
+          itemType:item.itemType||"Parts",
+          alternativeReward:item.alternativeReward||"",
+          showInPreview:!!item.showInPreview,
+          itemSubtype:item.itemSubtype||"",
+        }));
       });
       return next;
     });
@@ -374,14 +384,13 @@ export default function LotterySimulator(){
   const renameBalance=async()=>{
     const oldName=lotteryName.trim();
     if(!savedBalances.some(b=>b.name===oldName)){setBuildState({status:"error",message:"Сначала выберите сохранённый баланс"});return}
-    const input=window.prompt("Новое название баланса:",oldName);
-    if(!input)return;
-    const cleanName=input.trim();
-    if(!cleanName||cleanName===oldName)return;
+    const cleanName=renameValue.trim();
+    if(!cleanName||cleanName===oldName){setRenaming(false);return}
     if(savedBalances.some(b=>b.name===cleanName)){setBuildState({status:"error",message:`Баланс «${cleanName}» уже существует`});return}
     const next=savedBalances.map(b=>b.name===oldName?{...b,name:cleanName}:b);
     setSavedBalances(next);
     setLotteryName(cleanName);
+    setRenaming(false);
     try{
       await window.workspaceStore?.write("lotteryBalances",next);
       setBuildState({status:"success",message:`Баланс переименован в «${cleanName}»`});
@@ -425,12 +434,12 @@ export default function LotterySimulator(){
       return (chestItems[chest.id]||[]).map((item,idx)=>({
         containerId:start+idx,
         containerType:"SingleItem",
-        category:item.category||"",
-        itemType:item.itemType||"",
+        category:item.category||"Gun",
+        itemType:item.itemType||"Parts",
         itemId:item.group,
         alternativeReward:item.alternativeReward||"",
         showInPreview:!!item.showInPreview,
-        itemSubtype:item.itemType==="Currency"?(item.itemSubtype||""):"",
+        itemSubtype:(item.itemType||"Parts")==="Currency"?(item.itemSubtype||""):"",
         count:item.drop,
         dropChance:item.weight,
       }));
@@ -468,10 +477,14 @@ export default function LotterySimulator(){
             {savedBalances.map(b=><option key={b.name} value={b.name}>{b.name}</option>)}
           </select>
         )}
-        {savedBalances.some(b=>b.name===lotteryName.trim())&&(<>
-          <button onClick={renameBalance} title="Переименовать баланс" style={{...pill,background:"transparent",color:T1,border:`1px solid ${BRD}`,padding:"6px 9px"}}>✎</button>
+        {savedBalances.some(b=>b.name===lotteryName.trim())&&(renaming?(<>
+          <In value={renameValue} onChange={setRenameValue} style={{width:140,fontSize:12}} placeholder="Новое название"/>
+          <button onClick={renameBalance} title="Сохранить название" style={{...pill,padding:"6px 9px"}}>✓</button>
+          <button onClick={()=>setRenaming(false)} title="Отмена" style={{...pill,background:"transparent",color:T2,border:`1px solid ${BRD}`,padding:"6px 9px"}}>✕</button>
+        </>):(<>
+          <button onClick={()=>{setRenameValue(lotteryName.trim());setRenaming(true)}} title="Переименовать баланс" style={{...pill,background:"transparent",color:T1,border:`1px solid ${BRD}`,padding:"6px 9px"}}>✎</button>
           <button onClick={deleteBalance} title="Удалить баланс" style={{...pill,background:"transparent",color:DNG,border:`1px solid ${DNG}44`,padding:"6px 9px"}}>🗑</button>
-        </>)}
+        </>))}
         <button onClick={addChest} style={pill}>+ сундук</button>
       </div>
       {buildState.message&&<div className={`config-status ${buildState.status}`} style={{margin:"0 0 10px"}}>{buildState.message}</div>}

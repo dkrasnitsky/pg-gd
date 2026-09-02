@@ -46,7 +46,21 @@ function LotteryConfigurator({event,onClose,onSave}){
     const results=[];
     for(const partition of partitions){
       const balance=balances.find(b=>b.name===partition.balanceName);
-      const balanceItems=balance?Object.values(balance.chests).flat().map(item=>({containerId:item.label,containerType:"SingleItem",category:item.category||"",itemType:item.itemType||"",itemId:item.group,alternativeReward:item.alternativeReward||"",showInPreview:!!item.showInPreview,itemSubtype:item.itemSubtype||"",count:item.drop,dropChance:item.weight})):[];
+      const balanceItems=balance?Object.values(balance.chests).flatMap((chestItemList,ci)=>{
+        const start=(ci+1)*100+1;
+        return (chestItemList||[]).map((item,idx)=>({
+          containerId:start+idx,
+          containerType:"SingleItem",
+          category:item.category||"Gun",
+          itemType:item.itemType||"Parts",
+          itemId:item.group,
+          alternativeReward:item.alternativeReward||"",
+          showInPreview:!!item.showInPreview,
+          itemSubtype:(item.itemType||"Parts")==="Currency"?(item.itemSubtype||""):"",
+          count:item.drop,
+          dropChance:item.weight,
+        }));
+      }):[];
       try{
         const result=await window.workspaceGoogle?.applyLotteryPartition({
           name:partition.name,id:partition.id,style:partition.style,segment:partition.segment,
