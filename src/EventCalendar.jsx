@@ -46,13 +46,13 @@ function LotteryConfigurator({event,onClose,onSave}){
     const results=[];
     for(const partition of partitions){
       const balance=balances.find(b=>b.name===partition.balanceName);
-      const balanceItems=balance?Object.values(balance.chests).flat().map(item=>({containerId:item.label,itemId:item.group,count:item.drop,dropChance:item.weight})):[];
+      const balanceItems=balance?Object.values(balance.chests).flat().map(item=>({containerId:item.label,containerType:"SingleItem",category:item.category||"",itemType:item.itemType||"",itemId:item.group,alternativeReward:item.alternativeReward||"",showInPreview:!!item.showInPreview,itemSubtype:item.itemSubtype||"",count:item.drop,dropChance:item.weight})):[];
       try{
         const result=await window.workspaceGoogle?.applyLotteryPartition({
           name:partition.name,id:partition.id,style:partition.style,segment:partition.segment,
           startDateTime:partition.startDateTime?`${partition.startDateTime}:00`:"",
           endDateTime:partition.endDateTime?`${partition.endDateTime}:00`:"",
-          balanceItems,target,
+          balanceItems,balanceName:partition.balanceName,target,
         });
         results.push(`✓ ${partition.name}: ${result.names.join(", ")}`);
       }catch(error){

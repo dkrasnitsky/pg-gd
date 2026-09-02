@@ -22,6 +22,7 @@ const segmentsSheetGid=1297452825;
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
+const contentPoolSpreadsheetId="1uOsaKGRCU1gghA5yGFDGXNl13bP5IwP5GnbO8VksLfM";
 const weaponGeneratorPath="Z:\\pg3d\\Assets\\Scripts\\Item\\Generated\\ItemConverterId_clientToIndex.cs";
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
 const jiraEmail="d.krasnitsky@cubicgames.com";
@@ -118,10 +119,12 @@ async function sheetsRequest(accessToken,url,options={}){
 
 function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
 
-async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base){
+async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base,isNewbies){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title,index)`);
-  const templates=[{source:"Chest",suffix:"Chest"},{source:"GameRewards",suffix:"Rewards"},{source:"InappsCurrency",suffix:"Currency"}];
+  const templates=isNewbies
+    ?[{source:"NewbiesChest",suffix:"Chest"},{source:"NewbiesGameRewards",suffix:"Rewards"},{source:"NewbiesInappsCurrency",suffix:"Currency"}]
+    :[{source:"Chest",suffix:"Chest"},{source:"GameRewards",suffix:"Rewards"},{source:"InappsCurrency",suffix:"Currency"}];
   const sheets=new Map((spreadsheet.sheets||[]).map(sheet=>[sheet.properties.title,sheet.properties]));
   const missing=templates.filter(template=>!sheets.has(template.source)).map(template=>template.source);
   if(missing.length)throw new Error(`Не найдены дефолтные листы: ${missing.join(", ")}`);
@@ -142,8 +145,19 @@ async function buildLotteryConfigInSheet(accessToken,spreadsheetId,sheetName,ite
   const title=String(sheetName||"").trim();
   if(!title)throw new Error("Введите название листа с лотереей");
   if(!Array.isArray(items)||!items.length)throw new Error("В симуляторе нет данных для записи");
-  const normalized=items.map(item=>({containerId:String(item?.containerId??"").trim(),itemId:String(item?.itemId??""),count:Number(item?.count),dropChance:Number(item?.dropChance)}));
-  if(normalized.some(item=>!item.containerId||!Number.isFinite(item.count)||!Number.isFinite(item.dropChance)))throw new Error("В симуляторе есть некорректные ID или числовые значения");
+  const normalized=items.map(item=>({
+    containerId:Number(item?.containerId),
+    containerType:String(item?.containerType||"SingleItem"),
+    category:String(item?.category||""),
+    itemType:String(item?.itemType||""),
+    itemId:String(item?.itemId??""),
+    alternativeReward:String(item?.alternativeReward||""),
+    showInPreview:!!item?.showInPreview,
+    itemSubtype:String(item?.itemSubtype||""),
+    count:Number(item?.count),
+    dropChance:Number(item?.dropChance),
+  }));
+  if(normalized.some(item=>!Number.isInteger(item.containerId)||!item.itemType||!Number.isFinite(item.count)||!Number.isFinite(item.dropChance)))throw new Error("В симуляторе есть некорректные ID или числовые значения");
   const duplicateIds=normalized.map(item=>item.containerId).filter((id,index,all)=>all.indexOf(id)!==index);
   if(duplicateIds.length)throw new Error(`ID повторяются в симуляторе: ${[...new Set(duplicateIds)].join(", ")}`);
 
@@ -151,26 +165,89 @@ async function buildLotteryConfigInSheet(accessToken,spreadsheetId,sheetName,ite
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.title===title);
   if(!sheet)throw new Error(`Лист «${title}» не найден`);
+  const sheetId=sheet.properties.sheetId;
 
   const quotedTitle=`'${title.replace(/'/g,"''")}'`;
-  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS`);
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   const rows=valuesResponse.values||[];
-  const required=["container_id","item_id","count","drop_chance"];
+  const required=["container_id","container_type","category","item_type","item_id","alternative_reward","ShowInPreview","item_subtype","count","drop_chance"];
   const headerIndex=rows.findIndex(row=>required.every(header=>row.includes(header)));
   if(headerIndex<0)throw new Error(`На листе «${title}» не найдены поля: ${required.join(", ")}`);
   const header=rows[headerIndex];
   const columns=Object.fromEntries(required.map(name=>[name,header.indexOf(name)]));
-  const rowByContainer=new Map();
-  rows.slice(headerIndex+1).forEach((row,index)=>{const value=String(row[columns.container_id]??"").trim();if(value&&!rowByContainer.has(value))rowByContainer.set(value,headerIndex+2+index)});
-  const missing=normalized.filter(item=>!rowByContainer.has(item.containerId)).map(item=>item.containerId);
-  if(missing.length)throw new Error(`На листе не найдены container_id: ${missing.join(", ")}`);
+  const formulaCol=header.findIndex(h=>String(h||"").trim()==="drop_chance (400)%");
+
+  const blockOf=id=>Math.floor(id/100)*100;
+  const blocks=new Map();
+  for(const item of normalized){const b=blockOf(item.containerId);if(!blocks.has(b))blocks.set(b,[]);blocks.get(b).push(item)}
+  for(const arr of blocks.values())arr.sort((a,b)=>a.containerId-b.containerId);
+
+  const dataRows=rows.slice(headerIndex+1).map((row,i)=>({sheetRow:headerIndex+2+i,containerId:Number(row[columns.container_id])})).filter(r=>Number.isFinite(r.containerId));
+  const existingBlocks=new Map();
+  for(const r of dataRows){const b=blockOf(r.containerId);if(!existingBlocks.has(b))existingBlocks.set(b,[]);existingBlocks.get(b).push(r)}
+  for(const arr of existingBlocks.values())arr.sort((a,b)=>a.sheetRow-b.sheetRow);
+
+  const notFoundBlocks=[...blocks.keys()].filter(b=>!existingBlocks.has(b));
+  if(notFoundBlocks.length)throw new Error(`На листе не найден блок строк для ID начиная с ${notFoundBlocks.join(", ")} — авто-создание нового блока не поддерживается`);
+
+  const structRequests=[];
+  for(const [blockStart,blockItems] of blocks){
+    const existing=existingBlocks.get(blockStart);
+    const needed=blockItems.length;
+    const have=existing.length;
+    if(have>needed){
+      const toDelete=existing.slice(needed);
+      const startIndex=toDelete[0].sheetRow-1;
+      const endIndex=toDelete[toDelete.length-1].sheetRow;
+      structRequests.push({sortRow:startIndex,requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]});
+    }else if(have<needed){
+      const missing=needed-have;
+      const lastRow=existing[existing.length-1].sheetRow;
+      const group=[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex:lastRow,endIndex:lastRow+missing},inheritFromBefore:true}}];
+      if(formulaCol>=0){
+        group.push({copyPaste:{
+          source:{sheetId,startRowIndex:lastRow-1,endRowIndex:lastRow,startColumnIndex:formulaCol,endColumnIndex:formulaCol+1},
+          destination:{sheetId,startRowIndex:lastRow,endRowIndex:lastRow+missing,startColumnIndex:formulaCol,endColumnIndex:formulaCol+1},
+          pasteType:"PASTE_FORMULA"
+        }});
+      }
+      structRequests.push({sortRow:lastRow,requests:group});
+    }
+  }
+  if(structRequests.length){
+    structRequests.sort((a,b)=>b.sortRow-a.sortRow);
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:structRequests.flatMap(r=>r.requests)})});
+  }
+
+  // Blocks below any resized block physically shift — compute the corrected final start row for each
+  // block by walking blocks top-to-bottom and accumulating the net row-count delta introduced above it.
+  const blocksByOriginalOrder=[...blocks.keys()].sort((a,b)=>existingBlocks.get(a)[0].sheetRow-existingBlocks.get(b)[0].sheetRow);
+  const blockStarts=[];
+  let cumulativeDelta=0;
+  for(const blockStart of blocksByOriginalOrder){
+    const existing=existingBlocks.get(blockStart);
+    const needed=blocks.get(blockStart).length;
+    const have=existing.length;
+    blockStarts.push({blockStart,startRow:existing[0].sheetRow+cumulativeDelta});
+    cumulativeDelta+=(needed-have);
+  }
 
   const data=[];
-  for(const item of normalized){
-    const row=rowByContainer.get(item.containerId);
-    data.push({range:`${quotedTitle}!${colLetter(columns.item_id)}${row}`,values:[[item.itemId]]});
-    data.push({range:`${quotedTitle}!${colLetter(columns.count)}${row}`,values:[[item.count]]});
-    data.push({range:`${quotedTitle}!${colLetter(columns.drop_chance)}${row}`,values:[[item.dropChance]]});
+  for(const {blockStart,startRow}of blockStarts){
+    const blockItems=blocks.get(blockStart);
+    blockItems.forEach((item,index)=>{
+      const row=startRow+index;
+      data.push({range:`${quotedTitle}!${colLetter(columns.container_id)}${row}`,values:[[item.containerId]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.container_type)}${row}`,values:[[item.containerType]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.category)}${row}`,values:[[item.category]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.item_type)}${row}`,values:[[item.itemType]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.item_id)}${row}`,values:[[item.itemId]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.alternative_reward)}${row}`,values:[[item.alternativeReward]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.ShowInPreview)}${row}`,values:[[item.showInPreview]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.item_subtype)}${row}`,values:[[item.itemSubtype]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.count)}${row}`,values:[[item.count]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.drop_chance)}${row}`,values:[[item.dropChance]]});
+    });
   }
   await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
   return{updated:normalized.length,sheetName:title};
@@ -255,19 +332,34 @@ ipcMain.handle("google:get-segments",async()=>{
   return [...new Set(col.map(v=>String(v||"").trim()).filter(Boolean))];
 });
 
+ipcMain.handle("google:get-reward-pools",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${contentPoolSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.title==="Pools");
+  if(!sheet)return [];
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const resp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!A1:A10000`)}?majorDimension=COLUMNS&valueRenderOption=UNFORMATTED_VALUE`);
+  const col=(resp.values&&resp.values[0])||[];
+  const header=col[0];
+  const rest=String(header||"").trim().toLowerCase()==="poolid"?col.slice(1):col;
+  return [...new Set(rest.map(v=>String(v||"").trim()).filter(Boolean))];
+});
+
 ipcMain.handle("google:apply-lottery-partition",async(_event,partition)=>{
-  const {name,id,style,segment,startDateTime,endDateTime,balanceItems,target}=partition||{};
+  const {name,id,style,segment,startDateTime,endDateTime,balanceItems,balanceName,target}=partition||{};
   const cleanName=String(name||"").replace(/\s+/g,"");
   if(!cleanName)throw new Error("Укажите Name");
   if(!id)throw new Error("Укажите Id");
   const isTest=target==="test";
+  const isNewbies=/LotteryNewbies$/i.test(String(balanceName||"").trim());
   const lotterySpId=isTest?lotteryTestSpreadsheetId:lotterySpreadsheetId;
   const scheduleGid=isTest?lotteryTestScheduleGid:lotteryScheduleGid;
   const eventCenterSpId=isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId;
   const lotteryGid=isTest?eventCenterTestLotteryGid:eventCenterLotteryGid;
 
   const accessToken=await getGoogleAccessToken();
-  const names=await duplicateLotteryTemplateSheets(accessToken,lotterySpId,cleanName);
+  const names=await duplicateLotteryTemplateSheets(accessToken,lotterySpId,cleanName,isNewbies);
   await appendScheduleRow(accessToken,lotterySpId,scheduleGid,{name:cleanName,style:style||"",uniqueId:id});
   await appendLotteryRow(accessToken,eventCenterSpId,lotteryGid,{id,style:style||"",segment:segment||"",startDateTime:startDateTime||"",endDateTime:endDateTime||""});
   if(Array.isArray(balanceItems)&&balanceItems.length){

@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   fetchTier: (tag) => ipcRenderer.invoke("google:fetch-tier", tag),
   getNextLotteryId: () => ipcRenderer.invoke("google:get-next-lottery-id"),
   getSegments: () => ipcRenderer.invoke("google:get-segments"),
+  getRewardPools: () => ipcRenderer.invoke("google:get-reward-pools"),
   applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
 });
 

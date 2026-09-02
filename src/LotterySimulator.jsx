@@ -3,7 +3,9 @@ import { useState, useCallback, useEffect } from "react";
 const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a293",DNG="#ff5d55";
 
 const uid=()=>Math.random().toString(36).slice(2,8);
-const mkItem=(group,label,drop,weight,craft)=>({id:uid(),group,label,drop,weight,craft});
+const mkItem=(group,label,drop,weight,craft)=>({id:uid(),group,label,drop,weight,craft,category:"Gun",itemType:"Parts",alternativeReward:"",showInPreview:false,itemSubtype:""});
+const CATEGORY_OPTIONS=["Gun","Royale","Currency"];
+const ITEM_TYPE_OPTIONS=["Parts","Gun","Royale","Currency"];
 const palette=["#D8FA00","#00D4AA","#FF6B8A","#8B5CF6","#F59E0B","#06B6D4","#EC4899","#84CC16","#F97316","#6366F1"];
 function getGroupColors(items){const gs=[...new Set(items.map(i=>i.group).filter(Boolean))];const m={};gs.forEach((g,i)=>{m[g]=palette[i%palette.length]});return m}
 
@@ -286,6 +288,8 @@ export default function LotterySimulator(){
   const keyCost=activeChest?.keyCost??5;
   const chestId=activeChest?.id;
   const items=chestItems[chestId]||[];
+  const chestIndex=Math.max(0,chests.findIndex(c=>c.id===chestId));
+  const chestStartId=(chestIndex+1)*100+1;
 
   const setItems=(fn)=>{
     setChestItems(prev=>{
@@ -319,6 +323,11 @@ export default function LotterySimulator(){
   const [lotteryName,setLotteryName]=useState("");
   const [buildState,setBuildState]=useState({status:"idle",message:""});
   const [savedBalances,setSavedBalances]=useState([]);
+  const [rewardPools,setRewardPools]=useState([]);
+
+  useEffect(()=>{
+    window.workspaceGoogle?.getRewardPools().then(list=>{if(Array.isArray(list))setRewardPools(list)}).catch(()=>{});
+  },[]);
 
   useEffect(()=>{
     window.workspaceStore?.read("lotteryBalances").then(list=>{if(Array.isArray(list))setSavedBalances(list)}).catch(()=>{});
@@ -351,10 +360,37 @@ export default function LotterySimulator(){
     setLotteryName(name);
     setBuildState({status:"idle",message:""});
   };
+  const deleteBalance=async()=>{
+    const name=lotteryName.trim();
+    if(!savedBalances.some(b=>b.name===name)){setBuildState({status:"error",message:"Сначала выберите сохранённый баланс"});return}
+    if(!window.confirm(`Удалить баланс «${name}»?`))return;
+    const next=savedBalances.filter(b=>b.name!==name);
+    setSavedBalances(next);
+    try{
+      await window.workspaceStore?.write("lotteryBalances",next);
+      setBuildState({status:"success",message:`Баланс «${name}» удалён`});
+    }catch(e){setBuildState({status:"error",message:"Не удалось удалить: "+e.message})}
+  };
+  const renameBalance=async()=>{
+    const oldName=lotteryName.trim();
+    if(!savedBalances.some(b=>b.name===oldName)){setBuildState({status:"error",message:"Сначала выберите сохранённый баланс"});return}
+    const input=window.prompt("Новое название баланса:",oldName);
+    if(!input)return;
+    const cleanName=input.trim();
+    if(!cleanName||cleanName===oldName)return;
+    if(savedBalances.some(b=>b.name===cleanName)){setBuildState({status:"error",message:`Баланс «${cleanName}» уже существует`});return}
+    const next=savedBalances.map(b=>b.name===oldName?{...b,name:cleanName}:b);
+    setSavedBalances(next);
+    setLotteryName(cleanName);
+    try{
+      await window.workspaceStore?.write("lotteryBalances",next);
+      setBuildState({status:"success",message:`Баланс переименован в «${cleanName}»`});
+    }catch(e){setBuildState({status:"error",message:"Не удалось переименовать: "+e.message})}
+  };
 
   const upItem=(id,f,v)=>setItems(p=>p.map(i=>i.id===id?{...i,[f]:v}:i));
   const upItemNum=(id,f,v)=>upItem(id,f,Math.max(0,Number(v)||0));
-  const addItem=()=>setItems(p=>[...p,mkItem("","New Item",1,1,0)]);
+  const addItem=()=>setItems(p=>[...p,mkItem("","",1,1,0)]);
   const delItem=id=>setItems(p=>p.filter(i=>i.id!==id));
   const dupeItem=id=>setItems(p=>{const idx=p.findIndex(i=>i.id===id);if(idx<0)return p;const n=[...p];n.splice(idx+1,0,{...p[idx],id:uid()});return n});
 
@@ -384,7 +420,21 @@ export default function LotterySimulator(){
   const buildConfig=async()=>{
     const title=lotteryName.trim();
     if(!title){setBuildState({status:"error",message:"Введите точное название листа с лотереей"});return}
-    const configItems=Object.values(chestItems).flat().map(item=>({containerId:item.label,itemId:item.group,count:item.drop,dropChance:item.weight}));
+    const configItems=chests.flatMap((chest,ci)=>{
+      const start=(ci+1)*100+1;
+      return (chestItems[chest.id]||[]).map((item,idx)=>({
+        containerId:start+idx,
+        containerType:"SingleItem",
+        category:item.category||"",
+        itemType:item.itemType||"",
+        itemId:item.group,
+        alternativeReward:item.alternativeReward||"",
+        showInPreview:!!item.showInPreview,
+        itemSubtype:item.itemType==="Currency"?(item.itemSubtype||""):"",
+        count:item.drop,
+        dropChance:item.weight,
+      }));
+    });
     setBuildState({status:"loading",message:"Обновляем конфиг в Google Sheets…"});
     try{
       const result=await window.workspaceGoogle?.buildLotteryConfig(title,configItems);
@@ -418,6 +468,10 @@ export default function LotterySimulator(){
             {savedBalances.map(b=><option key={b.name} value={b.name}>{b.name}</option>)}
           </select>
         )}
+        {savedBalances.some(b=>b.name===lotteryName.trim())&&(<>
+          <button onClick={renameBalance} title="Переименовать баланс" style={{...pill,background:"transparent",color:T1,border:`1px solid ${BRD}`,padding:"6px 9px"}}>✎</button>
+          <button onClick={deleteBalance} title="Удалить баланс" style={{...pill,background:"transparent",color:DNG,border:`1px solid ${DNG}44`,padding:"6px 9px"}}>🗑</button>
+        </>)}
         <button onClick={addChest} style={pill}>+ сундук</button>
       </div>
       {buildState.message&&<div className={`config-status ${buildState.status}`} style={{margin:"0 0 10px"}}>{buildState.message}</div>}
@@ -459,22 +513,29 @@ export default function LotterySimulator(){
         <div style={{flex:1}}/>
         {items.length>0&&<button onClick={()=>setItems([])} style={{...pill,background:"transparent",color:DNG,border:`1px solid ${DNG}44`,fontSize:11,padding:"4px 12px"}}>Очистить все</button>}
       </div>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:580}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1080}}>
         <thead>
           <tr style={{color:T2,textAlign:"left"}}>
             <th style={{padding:"4px",fontWeight:500,width:52}}></th>
             <th style={{padding:"4px 6px",fontWeight:500}}>Item</th>
-            <th style={{padding:"4px 6px",fontWeight:500}}>Id</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Id</th>
             <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Дроп</th>
             <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Вес</th>
             <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Крафт</th>
             <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Шанс</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Категория</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Тип</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Alt.Reward</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Preview</th>
+            <th style={{padding:"4px 6px",fontWeight:500,textAlign:"center"}}>Subtype</th>
           </tr>
         </thead>
         <tbody>
-          {items.map(item=>{
+          {items.map((item,itemIndex)=>{
             const pct=totalWeight>0?(item.weight/totalWeight*100).toFixed(1):"0.0";
             const gc=item.group&&groupColors[item.group];
+            const containerId=chestStartId+itemIndex;
+            const isCurrency=item.itemType==="Currency";
             return (
               <tr key={item.id} style={{borderTop:`1px solid ${BRD}`}}>
                 <td style={{padding:"3px",whiteSpace:"nowrap"}}>
@@ -484,11 +545,33 @@ export default function LotterySimulator(){
                   </div>
                 </td>
                 <td style={{padding:"3px 6px"}}><div style={{display:"flex",alignItems:"center",gap:5}}>{gc&&<div style={{width:7,height:7,borderRadius:4,background:gc,flexShrink:0}}/>}<In value={item.group} onChange={v=>upItem(item.id,"group",v)} style={{width:100}} placeholder="(нет)"/></div></td>
-                <td style={{padding:"3px 6px"}}><In value={item.label} onChange={v=>upItem(item.id,"label",v)} style={{width:100}}/></td>
+                <td style={{padding:"3px 6px",textAlign:"center",color:T2}}>{containerId}</td>
                 <td style={{padding:"3px 6px",textAlign:"center"}}><In value={item.drop} onChange={v=>upItemNum(item.id,"drop",v)} type="text" inputMode="numeric" style={{width:50,textAlign:"center"}}/></td>
                 <td style={{padding:"3px 6px",textAlign:"center"}}><In value={item.weight} onChange={v=>upItemNum(item.id,"weight",v)} type="text" inputMode="numeric" style={{width:50,textAlign:"center"}}/></td>
                 <td style={{padding:"3px 6px",textAlign:"center"}}><In value={item.craft} onChange={v=>upItemNum(item.id,"craft",v)} type="text" inputMode="numeric" style={{width:50,textAlign:"center",color:item.craft>0?A:T2}}/></td>
                 <td style={{padding:"6px",textAlign:"center",color:T2,fontSize:11}}>{pct}%</td>
+                <td style={{padding:"3px 6px",textAlign:"center"}}>
+                  <select value={item.category} onChange={e=>upItem(item.id,"category",e.target.value)} style={{...inp,width:88,padding:"5px 4px",fontSize:11}}>
+                    {CATEGORY_OPTIONS.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"3px 6px",textAlign:"center"}}>
+                  <select value={item.itemType} onChange={e=>{const v=e.target.value;setItems(p=>p.map(i=>i.id===item.id?{...i,itemType:v,itemSubtype:v==="Currency"?i.itemSubtype:""}:i))}} style={{...inp,width:88,padding:"5px 4px",fontSize:11}}>
+                    {ITEM_TYPE_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"3px 6px",textAlign:"center"}}>
+                  <select value={item.alternativeReward} onChange={e=>upItem(item.id,"alternativeReward",e.target.value)} style={{...inp,width:150,padding:"5px 4px",fontSize:11}}>
+                    <option value="">(empty)</option>
+                    {rewardPools.map(p=><option key={p} value={p}>{p}</option>)}
+                  </select>
+                </td>
+                <td style={{padding:"3px 6px",textAlign:"center"}}>
+                  <input type="checkbox" checked={!!item.showInPreview} onChange={e=>upItem(item.id,"showInPreview",e.target.checked)} style={{width:15,height:15,accentColor:A,margin:0}}/>
+                </td>
+                <td style={{padding:"3px 6px",textAlign:"center"}}>
+                  <In value={item.itemSubtype} onChange={v=>upItem(item.id,"itemSubtype",v)} disabled={!isCurrency} style={{width:90,textAlign:"center",opacity:isCurrency?1:.4}} placeholder={isCurrency?"":"—"}/>
+                </td>
               </tr>
             );
           })}
