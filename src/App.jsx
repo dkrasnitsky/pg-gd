@@ -5,7 +5,7 @@ import LotterySimulator from "./LotterySimulator";
 import NotesPage from "./NotesPage";
 import EventCalendar from "./EventCalendar";
 import { VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore } from "react-icons/vsc";
-import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiPlus, FiSettings, FiTrash2, FiX } from "react-icons/fi";
+import { FiArrowLeft, FiChevronLeft, FiChevronRight, FiPackage, FiPlus, FiSettings, FiTrash2, FiX } from "react-icons/fi";
 import { MdDragIndicator } from "react-icons/md";
 
 const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a293",DNG="#ff5d55";
@@ -317,7 +317,7 @@ function ItemCard({item,onOpen}){
   );
 }
 
-function ItemDetail({item,onClose,onOpenLottery}){
+function ItemDetail({item,onClose,onOpenLottery,onOpenItemSettings}){
   const isEvent=item.type==="Event";
   const rarity=isEvent?null:rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
@@ -329,7 +329,7 @@ function ItemDetail({item,onClose,onOpenLottery}){
   return (
     <div className="event-modal-backdrop" style={{position:"fixed"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal">
-        <header><div><span>ITEM DATA</span><h2>{displayName||"без названия"}</h2></div><button onClick={onClose}><FiX/></button></header>
+        <header><div><span>ITEM DATA</span><h2>{displayName||"без названия"}</h2></div>{onOpenItemSettings&&<button type="button" onClick={()=>onOpenItemSettings(item)} title="Открыть настройки предмета" style={{width:32,height:32,display:"grid",placeItems:"center",border:`1px solid ${BRD}`,borderRadius:2,background:"transparent",color:T2,cursor:"pointer",flexShrink:0,alignSelf:"flex-start"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=A;e.currentTarget.style.color=A}} onMouseLeave={e=>{e.currentTarget.style.borderColor=BRD;e.currentTarget.style.color=T2}}><FiSettings size={15}/></button>}</header>
         <div style={{position:"relative"}}>
         {hasWarningSetting(item)&&<span title="Сеттинг требует внимания" style={{position:"absolute",top:0,right:0,fontSize:18,lineHeight:1}}>🚫</span>}
         <div style={{display:"flex",gap:20,alignItems:"flex-start",marginBottom:14,flexWrap:"wrap"}}>
@@ -382,6 +382,47 @@ function FilterDropdown({label,options,selected,onToggle,align="left"}){
   );
 }
 
+function CopyFilteredButton({items,align="left"}){
+  const [open,setOpen]=useState(false);
+  const [copied,setCopied]=useState("");
+  const boxRef=useRef(null);
+  useEffect(()=>{
+    if(!open)return;
+    const onDocClick=e=>{if(boxRef.current&&!boxRef.current.contains(e.target))setOpen(false)};
+    document.addEventListener("mousedown",onDocClick);
+    return()=>document.removeEventListener("mousedown",onDocClick);
+  },[open]);
+  const options=[{key:"id",label:"Id"},{key:"parts",label:"Parts"},{key:"tag",label:"tag"}];
+  const doCopy=async(field)=>{
+    const lines=items.map(it=>it[field]).filter(v=>v!==undefined&&v!==null&&String(v).trim()!=="").map(v=>String(v));
+    const text=lines.join("\n");
+    try{
+      await navigator.clipboard.writeText(text);
+      setCopied(field);
+      setTimeout(()=>setCopied(""),1500);
+    }catch{}
+    setOpen(false);
+  };
+  return (
+    <div ref={boxRef} style={{position:"relative",flexShrink:0}}>
+      <button type="button" onClick={()=>setOpen(v=>!v)} className="ghost-action" style={{whiteSpace:"nowrap"}}>
+        {copied?`Скопировано ✓`:"Copy"}
+      </button>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="right"?"right":"left"]:0,zIndex:30,background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,padding:6,minWidth:140,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+          {options.map(o=>(
+            <div key={o.key} onClick={()=>doCopy(o.key)} style={{padding:"6px 8px",cursor:"pointer",fontSize:12,color:T1,borderRadius:2}}
+              onMouseEnter={e=>{e.currentTarget.style.background=`${A}22`;e.currentTarget.style.color=A}}
+              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T1}}>
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RangeFilterDropdown({label,from,to,onFromChange,onToChange,align="left"}){
   const [open,setOpen]=useState(false);
   const boxRef=useRef(null);
@@ -408,7 +449,7 @@ function RangeFilterDropdown({label,from,to,onFromChange,onToChange,align="left"
   );
 }
 
-function ContentPicker({items=[],settingsList=[],onOpenLottery}){
+function ContentPicker({items=[],settingsList=[],onOpenLottery,onOpenItemSettings}){
   const [query,setQuery]=useState("");
   const [typeFilter,setTypeFilter]=useState(()=>new Set());
   const [rarityFilter,setRarityFilter]=useState(()=>new Set());
@@ -416,6 +457,7 @@ function ContentPicker({items=[],settingsList=[],onOpenLottery}){
   const [settingFilter,setSettingFilter]=useState(()=>new Set());
   const [lethalityFrom,setLethalityFrom]=useState("");
   const [lethalityTo,setLethalityTo]=useState("");
+  const [hasPartsFilter,setHasPartsFilter]=useState(false);
   const [openItem,setOpenItem]=useState(null);
   const settingsPool=useMemo(()=>{
     const used=items.flatMap(i=>String(i.setting||"").split(",").map(s=>s.trim()).filter(Boolean));
@@ -423,9 +465,9 @@ function ContentPicker({items=[],settingsList=[],onOpenLottery}){
   },[items,settingsList]);
   const tierPool=useMemo(()=>[...new Set(items.map(i=>i.tier).filter(Boolean))].sort(),[items]);
   const toggle=(setFn,value)=>setFn(prev=>{const next=new Set(prev);next.has(value)?next.delete(value):next.add(value);return next});
-  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0||lethalityFrom!==""||lethalityTo!=="";
+  const hasActiveSearch=query.trim().length>0||typeFilter.size>0||rarityFilter.size>0||tierFilter.size>0||settingFilter.size>0||lethalityFrom!==""||lethalityTo!==""||hasPartsFilter;
   const resetAll=()=>{
-    setQuery("");setTypeFilter(new Set());setRarityFilter(new Set());setTierFilter(new Set());setSettingFilter(new Set());setLethalityFrom("");setLethalityTo("");
+    setQuery("");setTypeFilter(new Set());setRarityFilter(new Set());setTierFilter(new Set());setSettingFilter(new Set());setLethalityFrom("");setLethalityTo("");setHasPartsFilter(false);
   };
   const filtered=useMemo(()=>{
     if(!hasActiveSearch)return [];
@@ -450,12 +492,13 @@ function ContentPicker({items=[],settingsList=[],onOpenLottery}){
         if(lo!==null&&value<lo)return false;
         if(hi!==null&&value>hi)return false;
       }
+      if(hasPartsFilter&&!(it.id&&it.parts))return false;
       return true;
     });
-  },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,lethalityFrom,lethalityTo,hasActiveSearch]);
+  },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,lethalityFrom,lethalityTo,hasPartsFilter,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
-      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onOpenLottery={onOpenLottery}/>}
+      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onOpenLottery={onOpenLottery} onOpenItemSettings={onOpenItemSettings}/>}
       <div style={{position:"sticky",top:0,zIndex:25,background:BG,marginLeft:-24,marginRight:-24,paddingTop:18,paddingLeft:24,paddingRight:24,paddingBottom:14}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
@@ -465,6 +508,8 @@ function ContentPicker({items=[],settingsList=[],onOpenLottery}){
           <FilterDropdown label="тир" options={tierPool} selected={tierFilter} onToggle={v=>toggle(setTierFilter,v)}/>
           <RangeFilterDropdown label="летальность" from={lethalityFrom} to={lethalityTo} onFromChange={setLethalityFrom} onToChange={setLethalityTo}/>
           <FilterDropdown label="сеттинг" options={settingsPool} selected={settingFilter} onToggle={v=>toggle(setSettingFilter,v)} align="right"/>
+          <button type="button" onClick={()=>setHasPartsFilter(v=>!v)} className={hasPartsFilter?"primary-action":"ghost-action"} title="Есть детали" style={{flexShrink:0}}><FiPackage/></button>
+          <CopyFilteredButton items={filtered} align="right"/>
           {hasActiveSearch&&<button type="button" onClick={resetAll} className="ghost-action" style={{whiteSpace:"nowrap",color:DNG,borderColor:DNG}}>✕ сбросить</button>}
         </div>
       </div>
@@ -742,8 +787,9 @@ function SettingsManager({settingsList,onSettingsListChange,items,onItemsChange}
   );
 }
 
-function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList=[],onSettingsListChange}){
-  const [selId,setSelId]=useState(null);
+function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList=[],onSettingsListChange,focusRequest}){
+  const [selId,setSelId]=useState(()=>focusRequest?.uid||null);
+  useEffect(()=>{if(focusRequest?.uid)setSelId(focusRequest.uid)},[focusRequest]);
   const [tierStatus,setTierStatus]=useState("");
   const [listQuery,setListQuery]=useState("");
   const [libraryOpen,setLibraryOpen]=useState(false);
@@ -842,7 +888,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   </>;
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery}){
+function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery,onOpenItemSettings}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
@@ -858,7 +904,7 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
       </div>
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"0 24px 24px"}}>
-          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery}/></div>
+          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery} onOpenItemSettings={onOpenItemSettings}/></div>
           <div style={{display:activeTool==="offers"?"block":"none",paddingTop:18}}><OfferConstructor/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none",paddingTop:18}}><LootboxSimulator/></div>
           <div style={{display:activeTool==="lottery"?"block":"none",paddingTop:18}}><LotterySimulator/></div>
@@ -987,8 +1033,9 @@ function GroupHeader({label,count,collapsed,onToggle}){
   );
 }
 
-function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settingsList,onSettingsListChange}){
-  const [panelMode,setPanelMode]=useState("nav");
+function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settingsList,onSettingsListChange,focusRequest}){
+  const [panelMode,setPanelMode]=useState(focusRequest?"catalog":"nav");
+  useEffect(()=>{if(focusRequest)setPanelMode("catalog")},[focusRequest]);
   const [sectionId,setSectionId]=useState(()=>navigation[0]?.id);
   const [itemId,setItemId]=useState(null);
   const [showSymbols,setShowSymbols]=useState(false);
@@ -1005,7 +1052,7 @@ function SettingsPanel({navigation,onChange,onClose,items,onItemsChange,settings
   const removeItem=()=>{updateSection({items:section.items.filter(i=>i.id!==item.id)});setItemId(null)};
   const pickIcon=(event,apply)=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>apply({icon:String(reader.result),iconName:file.name});reader.readAsDataURL(file);event.target.value=""};
   const unicodeSymbols=["◇","◆","●","○","■","□","★","☆","✓","⚡","⚙","🔧","📄","📁","📊","📋","🗓","🧩","🎯","🛠","🚀","💡","🔗","🌐","🎮","🎲","💎","🏠","🔔","⏱"];
-  if(panelMode==="catalog")return <div className="settings-page"><ItemCatalogPanel items={items} onItemsChange={onItemsChange} onSwitchMode={()=>setPanelMode("nav")} onClose={onClose} settingsList={settingsList} onSettingsListChange={onSettingsListChange}/></div>;
+  if(panelMode==="catalog")return <div className="settings-page"><ItemCatalogPanel items={items} onItemsChange={onItemsChange} onSwitchMode={()=>setPanelMode("nav")} onClose={onClose} settingsList={settingsList} onSettingsListChange={onSettingsListChange} focusRequest={focusRequest}/></div>;
   return <div className="settings-page">
     <aside className="settings-nav">
       <div className="settings-title">Настройки</div>
@@ -1082,7 +1129,7 @@ function AppShell(){
   const [items,setItems]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-items-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
   const [settingsList,setSettingsList]=useState(()=>{try{const saved=JSON.parse(localStorage.getItem("pg3d-settings-v1"));return Array.isArray(saved)?saved:[]}catch(e){return[]}});
   const [selectedSection,setSelectedSection]=useState("dashboard");
-  const [showSettings,setShowSettings]=useState(false);
+  const [settingsRequest,setSettingsRequest]=useState(null);
   const [draggingTab,setDraggingTab]=useState(null);
   const [collapsedGroups,setCollapsedGroups]=useState(()=>new Set());
   const toggleGroup=id=>setCollapsedGroups(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next});
@@ -1090,6 +1137,7 @@ function AppShell(){
   const tabsScrollRef=useRef(null);
   const active=tabs.find(t=>t.id===activeId)||tabs[0];
   const activeSection=selectedSection;
+  const isSettingsActive=active?.type==="settings";
   useEffect(()=>{if(activeId&&active)setSelectedSection(active.type==="page"?PAGE_SECTIONS[active.page]:(active.section||"files"))},[activeId]);
 
   useEffect(()=>{
@@ -1124,13 +1172,22 @@ function AppShell(){
   const openLottery=()=>{
     openPage("lottery");
   };
+  const openSettingsTab=()=>{
+    const id="page-settings";
+    setTabs(prev=>prev.some(t=>t.id===id)?prev:[...prev,{id,type:"settings",title:"Настройки",tabIcon:"⚙"}]);
+    setActiveId(id);
+  };
+  const openItemSettings=(item)=>{
+    setSettingsRequest({uid:item.uid,nonce:Date.now()});
+    openSettingsTab();
+  };
   const openIn=(url,title,section=selectedSection,sourceItemId=null,tabIcon=null,icon=null)=>{
     const existing=tabs.find(t=>t.type==="web"&&(sourceItemId?t.sourceItemId===sourceItemId:t.title===title));
     if(existing){setActiveId(existing.id);return}
     const id=`web-${Date.now()}`;
     setTabs(prev=>[...prev,{id,type:"web",url,title,section,sourceItemId,tabIcon,icon}]);setActiveId(id);
   };
-  const selectSection=(section)=>{setShowSettings(false);setSelectedSection(section.id);setActiveId(null)};
+  const selectSection=(section)=>{setSelectedSection(section.id);setActiveId(null)};
   const selectTab=(tab)=>{setActiveId(tab.id);setSelectedSection(tab.type==="page"?PAGE_SECTIONS[tab.page]:(tab.section||"files"))};
   const openSidebarItem=(item)=>item.url?openIn(item.url,item.label,selectedSection,item.id,item.tabIcon,item.icon):openPage(item.id,item.tabIcon);
   const closeTab=(id)=>{
@@ -1146,18 +1203,19 @@ function AppShell(){
   };
   const scrollTabs=direction=>tabsScrollRef.current?.scrollBy({left:direction*320,behavior:"smooth"});
   const renderTab=tab=>{
+    if(tab.type==="settings")return <SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>closeTab(tab.id)} items={items} onItemsChange={setItems} settingsList={settingsList} onSettingsListChange={setSettingsList} focusRequest={settingsRequest}/>;
     if(tab.type==="web")return <webview className="workspace-frame" src={tab.url} partition="persist:pg3d-workspace" allowpopups="true"/>;
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
     if(tab.page==="events")return <EventCalendar/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery}/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery} onOpenItemSettings={openItemSettings}/>;
   };
 
   return <div className="desktop-app">
     <aside className="app-sidebar">
       <div className="app-brand"><img className="brand-mark" src="/icons/pg3d-512.png" alt="PG3D Dashboard"/><div><b>PG3D</b><span>Workspace</span></div></div>
       <nav className="section-nav">
-        {navigation.map(section=><button key={section.id} className={activeSection===section.id&&!showSettings?"section-button active":"section-button"} onClick={()=>selectSection(section)}><SectionIcon value={section.icon} color={activeSection===section.id?A:"#b7b7bd"}/><span>{section.label}</span></button>)}
+        {navigation.map(section=><button key={section.id} className={activeSection===section.id&&!isSettingsActive?"section-button active":"section-button"} onClick={()=>selectSection(section)}><SectionIcon value={section.icon} color={activeSection===section.id?A:"#b7b7bd"}/><span>{section.label}</span></button>)}
       </nav>
       <div className="sidebar-divider"/>
       <div className="section-caption">{navigation.find(s=>s.id===activeSection)?.label||"Содержимое"}</div>
@@ -1166,8 +1224,8 @@ function AppShell(){
           const activeNavSection=navigation.find(s=>s.id===activeSection);
           const navItems=activeNavSection?.items||[];
           const navGroups=activeNavSection?.groups||[];
-          const isActiveItem=item=>(active?.page===item.id||active?.title===item.label)&&activeId&&!showSettings;
-          const handleClick=item=>{setShowSettings(false);openSidebarItem(item)};
+          const isActiveItem=item=>(active?.page===item.id||active?.title===item.label)&&activeId&&!isSettingsActive;
+          const handleClick=item=>{openSidebarItem(item)};
           if(!navGroups.length)return navItems.map(item=><InnerNavButton key={item.id} item={item} isActive={isActiveItem(item)} onClick={()=>handleClick(item)}/>);
           const byGroup=new Map(navGroups.map(g=>[g.id,[]]));
           const ungrouped=[];
@@ -1190,21 +1248,20 @@ function AppShell(){
           </>;
         })()}
       </div>
-      <div className="sidebar-footer"><span className="status-dot"/><span>Локальное приложение</span><button className={showSettings?"sidebar-settings active":"sidebar-settings"} aria-label="Настройки" onClick={()=>setShowSettings(true)}><FiSettings/></button></div>
+      <div className="sidebar-footer"><span className="status-dot"/><span>Локальное приложение</span><button className={isSettingsActive?"sidebar-settings active":"sidebar-settings"} aria-label="Настройки" onClick={openSettingsTab}><FiSettings/></button></div>
     </aside>
     <main className="app-main">
       <header className="workspace-tabs" onDoubleClick={()=>window.desktopWindow?.toggleMaximize()}>
-        <div ref={tabsScrollRef} className="tabs-scroll" onWheel={e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){e.preventDefault();tabsScrollRef.current.scrollLeft+=e.deltaY}}}>{tabs.map(tab=><button key={tab.id} draggable className={`${tab.id===activeId?"workspace-tab active":"workspace-tab"}${draggingTab===tab.id?" dragging":""}`} onDragStart={e=>{setDraggingTab(tab.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",tab.id)}} onDragOver={e=>{e.preventDefault();moveTabOver(tab.id)}} onDragEnd={()=>setDraggingTab(null)} onClick={()=>{setShowSettings(false);selectTab(tab)}}><MdDragIndicator className="tab-grip"/>{tab.icon?<TintedIcon src={tab.icon} className="tab-image-icon"/>:<span className="tab-symbol">{tab.tabIcon||(tab.type==="web"?getTabIcon(tab.title):"◇")}</span>}<span>{tab.title}</span><i onClick={e=>{e.stopPropagation();closeTab(tab.id)}}>×</i></button>)}</div>
+        <div ref={tabsScrollRef} className="tabs-scroll" onWheel={e=>{if(Math.abs(e.deltaY)>Math.abs(e.deltaX)){e.preventDefault();tabsScrollRef.current.scrollLeft+=e.deltaY}}}>{tabs.map(tab=><button key={tab.id} draggable className={`${tab.id===activeId?"workspace-tab active":"workspace-tab"}${draggingTab===tab.id?" dragging":""}`} onDragStart={e=>{setDraggingTab(tab.id);e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain",tab.id)}} onDragOver={e=>{e.preventDefault();moveTabOver(tab.id)}} onDragEnd={()=>setDraggingTab(null)} onClick={()=>selectTab(tab)}><MdDragIndicator className="tab-grip"/>{tab.icon?<TintedIcon src={tab.icon} className="tab-image-icon"/>:<span className="tab-symbol">{tab.tabIcon||(tab.type==="web"?getTabIcon(tab.title):"◇")}</span>}<span>{tab.title}</span><i onClick={e=>{e.stopPropagation();closeTab(tab.id)}}>×</i></button>)}</div>
         <div className="tabs-scroll-controls"><button aria-label="Прокрутить вкладки влево" onClick={()=>scrollTabs(-1)}><FiChevronLeft/></button><button aria-label="Прокрутить вкладки вправо" onClick={()=>scrollTabs(1)}><FiChevronRight/></button></div>
         <div className="window-drag"/>
         <WindowControls/>
       </header>
       <section className="workspace-content">
-        <div className={showSettings?"workspace-stack hidden":"workspace-stack"}>
+        <div className="workspace-stack">
           {tabs.map(tab=><div key={tab.id} className={tab.id===activeId?"tab-surface active":"tab-surface"}>{renderTab(tab)}</div>)}
           {!activeId&&<div className="empty-workspace"><div>{["configs","boards","files"].includes(selectedSection)?"Выбери файл":"Выбери страницу"}</div></div>}
         </div>
-        {showSettings&&<SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>setShowSettings(false)} items={items} onItemsChange={setItems} settingsList={settingsList} onSettingsListChange={setSettingsList}/>}
       </section>
     </main>
   </div>;
