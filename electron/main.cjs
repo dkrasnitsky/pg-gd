@@ -557,19 +557,6 @@ async function buildIconSuffixLookup(){
   }catch(error){return new Map()}
 }
 
-function catalogTagsBaselinePath(){return path.join(app.getPath("userData"),"catalog-xlsx-tags.json")}
-
-async function readTagsBaseline(){
-  try{return new Set(JSON.parse(await fs.promises.readFile(catalogTagsBaselinePath(),"utf8")))}catch(error){return null}
-}
-
-async function writeTagsBaseline(tagsSet){
-  const target=catalogTagsBaselinePath();
-  const temporary=`${target}.${process.pid}.${Date.now()}.tmp`;
-  await fs.promises.writeFile(temporary,JSON.stringify([...tagsSet]),"utf8");
-  await fs.promises.rename(temporary,target);
-}
-
 async function runCatalogXlsxSync(){
   try{await fs.promises.access(catalogXlsxPath)}catch{
     console.log("[catalog-sync] xlsx not found at",catalogXlsxPath,"skipping");
@@ -586,12 +573,11 @@ async function runCatalogXlsxSync(){
   let existing=[];
   try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
 
-  const catalogSheetTypes=new Set(["Module","Pet","Gadget","Gadget_Detail","Glider","Hat","Avatar","Trail","Car","Armor","Mask","Boots","Cape","WeaponSkin","Graffiti","PortraitFrameUI","PortraitUI","ProfileBackgroundUI"]);
   const byTag=new Map(existing.filter(i=>i.tag).map(i=>[String(i.tag).toLowerCase(),i]));
   const sheetNames=workbook.SheetNames.filter(name=>name!=="ModulePoint");
   const seenTags=new Set();
   const currentTags=new Set();
-  let added=0,iconsFilled=0,uidSeed=Date.now();
+  let added=0,iconsFilled=0,marked=0,uidSeed=Date.now();
   let result=[...existing];
 
   for(const sheetName of sheetNames){
@@ -613,41 +599,28 @@ async function runCatalogXlsxSync(){
 
       const existingItem=byTag.get(key);
       if(!existingItem){
-        const item={uid:`item-${uidSeed++}`,id,parts:"",tag,name,type:sheetName,rarity:"",setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon,eventIcon:""};
+        const item={uid:`item-${uidSeed++}`,id,parts:"",tag,name,type:sheetName,rarity:"",setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon,eventIcon:"",xlsxSync:true};
         result.push(item);byTag.set(key,item);added++;
-      }else if(!existingItem.icon&&icon){
-        existingItem.icon=icon;iconsFilled++;
+      }else{
+        if(!existingItem.icon&&icon){existingItem.icon=icon;iconsFilled++}
+        if(!existingItem.xlsxSync){existingItem.xlsxSync=true;marked++}
       }
     }
   }
 
-  // Deletions: a tag present in the last sync's snapshot but missing from the xlsx now was
-  // removed by the user from the table, so drop the matching catalog item too — but only
-  // among the categories this sync itself manages (never Weapon items or hand-made entries
-  // that never came from this table).
-  let previousTags=await readTagsBaseline();
-  let bootstrapped=false;
-  if(previousTags===null){
-    bootstrapped=true;
-    previousTags=new Set(existing.filter(i=>i.tag&&catalogSheetTypes.has(i.type)).map(i=>String(i.tag).toLowerCase()));
-  }
-  const removedTagSet=new Set([...previousTags].filter(t=>!currentTags.has(t)));
-  let removed=0;
-  if(removedTagSet.size){
-    const before=result.length;
-    result=result.filter(item=>{
-      if(!item.tag||!catalogSheetTypes.has(item.type))return true;
-      return !removedTagSet.has(String(item.tag).toLowerCase());
-    });
-    removed=before-result.length;
-  }
+  // Deletion no longer depends on the item's "type" field (which could drift from what the
+  // sync itself would have set, e.g. via manual edits or older import passes) — an item is
+  // only ever considered sync-managed once it has actually matched a table tag at least once
+  // (the xlsxSync marker set above). From then on, if that same tag disappears from the table,
+  // the item is dropped, regardless of what its type currently says.
+  const before=result.length;
+  result=result.filter(item=>!(item.xlsxSync&&item.tag&&!currentTags.has(String(item.tag).toLowerCase())));
+  const removed=before-result.length;
 
-  await writeTagsBaseline(currentTags);
-
-  const debug={xlsxRows:seenTags.size,previousBaselineSize:previousTags.size,currentTagsSize:currentTags.size,removedTagsDetected:removedTagSet.size,bootstrapped,sampleRemovedTags:[...removedTagSet].slice(0,5)};
+  const debug={xlsxRows:seenTags.size,currentTagsSize:currentTags.size,markedExisting:marked};
   console.log("[catalog-sync] debug",debug);
 
-  if(!added&&!iconsFilled&&!removed){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length,debug}}
+  if(!added&&!iconsFilled&&!removed&&!marked){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length,debug}}
 
   const target=storePath("items");
   const temporary=`${target}.${process.pid}.${Date.now()}.catalog.tmp`;
