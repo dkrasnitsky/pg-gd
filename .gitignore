@@ -52,3 +52,4 @@ public/icons-items/
 
 # one-off bulk import queue files
 import-enriched.json*
+data/  

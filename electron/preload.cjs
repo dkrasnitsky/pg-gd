@@ -35,3 +35,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
 contextBridge.exposeInMainWorld("iconLibrary", {
   list: () => ipcRenderer.invoke("icons:list"),
 });
+
+contextBridge.exposeInMainWorld("workspaceCatalog", {
+  syncFromXlsx: () => ipcRenderer.invoke("catalog:sync-from-xlsx"),
+});

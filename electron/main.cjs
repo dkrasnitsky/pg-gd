@@ -4,6 +4,7 @@ const https = require("node:https");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const XLSX = require("xlsx");
 
 let localServer;
 let mainWindow;
@@ -24,6 +25,7 @@ const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
 const contentPoolSpreadsheetId="1uOsaKGRCU1gghA5yGFDGXNl13bP5IwP5GnbO8VksLfM";
 const weaponGeneratorPath="Z:\\pg3d\\Assets\\Scripts\\Item\\Generated\\ItemConverterId_clientToIndex.cs";
+const catalogXlsxPath="C:\\Users\\Валерия\\Desktop\\pg3d-dashboard\\data\\PG3D_Items_by_Category_Name_Tag_Id.xlsx";
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
 const jiraEmail="d.krasnitsky@cubicgames.com";
 const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
@@ -540,7 +542,81 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   return analytics.get(needle)||null;
 });
 
-function iconLibraryDir(){return path.join(__dirname,"..","dist","icons-items")}
+function iconLibraryDir(){return liveIconsItemsDir}
+
+async function buildIconSuffixLookup(){
+  try{
+    const files=await fs.promises.readdir(iconLibraryDir());
+    const suffixRe=/_icon1?_big\.(png|webp|jpg|jpeg|gif)$/i;
+    const map=new Map();
+    for(const fn of files){
+      const m=suffixRe.exec(fn);
+      if(m){const key=fn.slice(0,m.index).toLowerCase();if(!map.has(key))map.set(key,fn)}
+    }
+    return map;
+  }catch(error){return new Map()}
+}
+
+async function runCatalogXlsxSync(){
+  try{await fs.promises.access(catalogXlsxPath)}catch{
+    console.log("[catalog-sync] xlsx not found at",catalogXlsxPath,"skipping");
+    return {added:0,iconsFilled:0,total:0,skipped:true};
+  }
+
+  let workbook;
+  try{workbook=XLSX.readFile(catalogXlsxPath)}catch(error){
+    console.error("[catalog-sync] failed to read xlsx",error.message);
+    return {added:0,iconsFilled:0,total:0,error:error.message};
+  }
+
+  const iconLookup=await buildIconSuffixLookup();
+  let existing=[];
+  try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
+
+  const byTag=new Map(existing.filter(i=>i.tag).map(i=>[String(i.tag).toLowerCase(),i]));
+  const sheetNames=workbook.SheetNames.filter(name=>name!=="ModulePoint");
+  const seenTags=new Set();
+  let added=0,iconsFilled=0,uidSeed=Date.now();
+  const result=[...existing];
+
+  for(const sheetName of sheetNames){
+    const ws=workbook.Sheets[sheetName];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+    for(let i=1;i<rows.length;i++){
+      const row=rows[i];
+      if(!row||row.length<3)continue;
+      let [name,tag,id]=row;
+      name=String(name??"").trim();tag=String(tag??"").trim();id=String(id??"").trim();
+      if(!tag||seenTags.has(tag))continue;
+      seenTags.add(tag);
+      const key=tag.toLowerCase();
+      const keyName=name.replace(/\s+/g,"").toLowerCase();
+      let icon="";
+      if(iconLookup.has(key))icon=`/icons-items/${iconLookup.get(key)}`;
+      else if(iconLookup.has(keyName))icon=`/icons-items/${iconLookup.get(keyName)}`;
+
+      const existingItem=byTag.get(key);
+      if(!existingItem){
+        const item={uid:`item-${uidSeed++}`,id,parts:"",tag,name,type:sheetName,rarity:"",setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon,eventIcon:""};
+        result.push(item);byTag.set(key,item);added++;
+      }else if(!existingItem.icon&&icon){
+        existingItem.icon=icon;iconsFilled++;
+      }
+    }
+  }
+
+  if(!added&&!iconsFilled){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,total:result.length}}
+
+  const target=storePath("items");
+  const temporary=`${target}.${process.pid}.${Date.now()}.catalog.tmp`;
+  await fs.promises.mkdir(path.dirname(target),{recursive:true});
+  await fs.promises.writeFile(temporary,JSON.stringify(result),"utf8");
+  await fs.promises.rename(temporary,target);
+  console.log(`[catalog-sync] done: ${added} new items, ${iconsFilled} icons filled, ${result.length} total`);
+  return {added,iconsFilled,total:result.length};
+}
+
+ipcMain.handle("catalog:sync-from-xlsx",async()=>runCatalogXlsxSync());
 
 ipcMain.handle("icons:list",async()=>{
   try{
@@ -604,12 +680,29 @@ function proxyJira(req,res){
   req.pipe(upstream);
 }
 
+const liveIconsItemsDir="C:\\Users\\Валерия\\Desktop\\pg3d-dashboard\\public\\icons-items";
+
 function startServer(){
   const root=path.join(__dirname,"..","dist");
   return new Promise(resolve=>{
     localServer=http.createServer((req,res)=>{
       if(req.url.startsWith("/jira-api"))return proxyJira(req,res);
       const rawPath=decodeURIComponent(req.url.split("?")[0]);
+      if(rawPath.startsWith("/icons-items/")){
+        const name=rawPath.slice("/icons-items/".length);
+        const livePath=path.join(liveIconsItemsDir,name);
+        if(livePath.startsWith(liveIconsItemsDir)){
+          fs.readFile(livePath,(liveError,liveData)=>{
+            if(!liveError){res.writeHead(200,{"content-type":mime[path.extname(livePath)]||"application/octet-stream"});return res.end(liveData)}
+            const fallbackPath=path.join(root,rawPath);
+            fs.readFile(fallbackPath,(fbError,fbData)=>{
+              if(fbError){res.writeHead(404);return res.end("Not found")}
+              res.writeHead(200,{"content-type":mime[path.extname(fallbackPath)]||"application/octet-stream"});res.end(fbData);
+            });
+          });
+          return;
+        }
+      }
       let filePath=path.join(root,rawPath==="/"?"index.html":rawPath);
       if(!filePath.startsWith(root))filePath=path.join(root,"index.html");
       fs.stat(filePath,(error,stat)=>{
@@ -637,6 +730,7 @@ async function createWindow(){
 app.whenReady().then(async()=>{
   await createWindow();
   runWeaponAutoSync().catch(error=>console.error("[sync] failed",error));
+  runCatalogXlsxSync().catch(error=>console.error("[catalog-sync] failed",error));
 });
 ipcMain.on("window:minimize",event=>BrowserWindow.fromWebContents(event.sender)?.minimize());
 ipcMain.on("window:toggle-maximize",event=>{const win=BrowserWindow.fromWebContents(event.sender);if(!win)return;win.isMaximized()?win.unmaximize():win.maximize()});

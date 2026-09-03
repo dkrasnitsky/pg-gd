@@ -826,18 +826,17 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
   const [importStatus,setImportStatus]=useState("");
   const importFromSheet=async()=>{
-    setImportStatus("Загружаем…");
+    if(!window.workspaceCatalog){setImportStatus("Синхронизация недоступна вне приложения");return}
+    setImportStatus("Читаем таблицу и папку с иконками…");
     try{
-      const res=await fetch("/catalog-import.json");
-      if(!res.ok)throw new Error("файл не найден");
-      const rows=await res.json();
-      const existingTags=new Set(items.map(i=>i.tag).filter(Boolean));
-      const toAdd=rows.filter(r=>{const tag=r[1];return tag&&!existingTags.has(tag)}).map(r=>{
-        const [id,tag,name,type,icon]=r;
-        return {uid:`item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,id,parts:"",tag,name,type,rarity:"",setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:icon?`/icons-items/${icon}`:"",eventIcon:""};
-      });
-      onItemsChange([...items,...toAdd]);
-      setImportStatus(`Добавлено ${toAdd.length} из ${rows.length} (пропущено как дубли: ${rows.length-toAdd.length})`);
+      const result=await window.workspaceCatalog.syncFromXlsx();
+      if(result?.skipped){setImportStatus("Файл таблицы не найден в data/PG3D_Items_by_Category_Name_Tag_Id.xlsx");return}
+      if(result?.error){setImportStatus("Ошибка чтения таблицы: "+result.error);return}
+      if(result?.added||result?.iconsFilled){
+        const fresh=await window.workspaceStore.read("items");
+        if(Array.isArray(fresh))onItemsChange(fresh);
+      }
+      setImportStatus(`Добавлено новых: ${result?.added||0}, подставлено иконок: ${result?.iconsFilled||0} (всего в каталоге: ${result?.total||items.length})`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
@@ -862,7 +861,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <SettingsManager settingsList={settingsList} onSettingsListChange={onSettingsListChange} items={items} onItemsChange={onItemsChange}/>
       <input value={listQuery} onChange={e=>setListQuery(e.target.value)} placeholder="Поиск по названию, id или tag…" style={{width:"100%",boxSizing:"border-box",marginBottom:8,padding:"8px 10px",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,outline:"none"}}/>
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
-      <button className="settings-add" onClick={importFromSheet} style={{marginTop:6}}>Импорт из таблицы</button>
+      <button className="settings-add" onClick={importFromSheet} style={{marginTop:6}}>Обновить из таблицы</button>
       {importStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{importStatus}</div>}
       <div className="settings-list">{groupedByType.map(([type,groupItems])=>{
         const collapsed=collapsedTypes.has(type);
