@@ -832,11 +832,11 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       const result=await window.workspaceCatalog.syncFromXlsx();
       if(result?.skipped){setImportStatus("Файл таблицы не найден в data/PG3D_Items_by_Category_Name_Tag_Id.xlsx");return}
       if(result?.error){setImportStatus("Ошибка чтения таблицы: "+result.error);return}
-      if(result?.added||result?.iconsFilled){
+      if(result?.added||result?.iconsFilled||result?.removed){
         const fresh=await window.workspaceStore.read("items");
         if(Array.isArray(fresh))onItemsChange(fresh);
       }
-      setImportStatus(`Добавлено новых: ${result?.added||0}, подставлено иконок: ${result?.iconsFilled||0} (всего в каталоге: ${result?.total||items.length})`);
+      setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, подставлено иконок: ${result?.iconsFilled||0} (всего в каталоге: ${result?.total??items.length})`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};

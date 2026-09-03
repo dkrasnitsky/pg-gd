@@ -557,27 +557,42 @@ async function buildIconSuffixLookup(){
   }catch(error){return new Map()}
 }
 
+function catalogTagsBaselinePath(){return path.join(app.getPath("userData"),"catalog-xlsx-tags.json")}
+
+async function readTagsBaseline(){
+  try{return new Set(JSON.parse(await fs.promises.readFile(catalogTagsBaselinePath(),"utf8")))}catch(error){return null}
+}
+
+async function writeTagsBaseline(tagsSet){
+  const target=catalogTagsBaselinePath();
+  const temporary=`${target}.${process.pid}.${Date.now()}.tmp`;
+  await fs.promises.writeFile(temporary,JSON.stringify([...tagsSet]),"utf8");
+  await fs.promises.rename(temporary,target);
+}
+
 async function runCatalogXlsxSync(){
   try{await fs.promises.access(catalogXlsxPath)}catch{
     console.log("[catalog-sync] xlsx not found at",catalogXlsxPath,"skipping");
-    return {added:0,iconsFilled:0,total:0,skipped:true};
+    return {added:0,iconsFilled:0,removed:0,total:0,skipped:true};
   }
 
   let workbook;
   try{workbook=XLSX.readFile(catalogXlsxPath)}catch(error){
     console.error("[catalog-sync] failed to read xlsx",error.message);
-    return {added:0,iconsFilled:0,total:0,error:error.message};
+    return {added:0,iconsFilled:0,removed:0,total:0,error:error.message};
   }
 
   const iconLookup=await buildIconSuffixLookup();
   let existing=[];
   try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
 
+  const catalogSheetTypes=new Set(["Module","Pet","Gadget","Gadget_Detail","Glider","Hat","Avatar","Trail","Car","Armor","Mask","Boots","Cape","WeaponSkin","Graffiti","PortraitFrameUI","PortraitUI","ProfileBackgroundUI"]);
   const byTag=new Map(existing.filter(i=>i.tag).map(i=>[String(i.tag).toLowerCase(),i]));
   const sheetNames=workbook.SheetNames.filter(name=>name!=="ModulePoint");
   const seenTags=new Set();
+  const currentTags=new Set();
   let added=0,iconsFilled=0,uidSeed=Date.now();
-  const result=[...existing];
+  let result=[...existing];
 
   for(const sheetName of sheetNames){
     const ws=workbook.Sheets[sheetName];
@@ -590,6 +605,7 @@ async function runCatalogXlsxSync(){
       if(!tag||seenTags.has(tag))continue;
       seenTags.add(tag);
       const key=tag.toLowerCase();
+      currentTags.add(key);
       const keyName=name.replace(/\s+/g,"").toLowerCase();
       let icon="";
       if(iconLookup.has(key))icon=`/icons-items/${iconLookup.get(key)}`;
@@ -605,15 +621,39 @@ async function runCatalogXlsxSync(){
     }
   }
 
-  if(!added&&!iconsFilled){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,total:result.length}}
+  // Deletions: a tag present in the last sync's snapshot but missing from the xlsx now was
+  // removed by the user from the table, so drop the matching catalog item too — but only
+  // among the categories this sync itself manages (never Weapon items or hand-made entries
+  // that never came from this table).
+  let previousTags=await readTagsBaseline();
+  if(previousTags===null){
+    // First run of this deletion-aware logic: bootstrap the baseline from whatever the
+    // catalog already has in these categories, so a table row removed just before this
+    // very sync is still caught.
+    previousTags=new Set(existing.filter(i=>i.tag&&catalogSheetTypes.has(i.type)).map(i=>String(i.tag).toLowerCase()));
+  }
+  const removedTagSet=new Set([...previousTags].filter(t=>!currentTags.has(t)));
+  let removed=0;
+  if(removedTagSet.size){
+    const before=result.length;
+    result=result.filter(item=>{
+      if(!item.tag||!catalogSheetTypes.has(item.type))return true;
+      return !removedTagSet.has(String(item.tag).toLowerCase());
+    });
+    removed=before-result.length;
+  }
+
+  await writeTagsBaseline(currentTags);
+
+  if(!added&&!iconsFilled&&!removed){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length}}
 
   const target=storePath("items");
   const temporary=`${target}.${process.pid}.${Date.now()}.catalog.tmp`;
   await fs.promises.mkdir(path.dirname(target),{recursive:true});
   await fs.promises.writeFile(temporary,JSON.stringify(result),"utf8");
   await fs.promises.rename(temporary,target);
-  console.log(`[catalog-sync] done: ${added} new items, ${iconsFilled} icons filled, ${result.length} total`);
-  return {added,iconsFilled,total:result.length};
+  console.log(`[catalog-sync] done: ${added} new items, ${iconsFilled} icons filled, ${removed} removed, ${result.length} total`);
+  return {added,iconsFilled,removed,total:result.length};
 }
 
 ipcMain.handle("catalog:sync-from-xlsx",async()=>runCatalogXlsxSync());
