@@ -107,7 +107,7 @@ function iv(item,qty){return item.unit ? qty/item.unit : qty*item.price}
 
 let _offerIdCounter=4;
 
-const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Event","Primary","Backup","Melee","Special","Sniper","Premium"];
+const ITEM_TYPES=["Weapon","Avatar","WeaponSkin","Gadget","Gadget_Detail","Module","Hat","Mask","Armor","Cape","Boots","Graffiti","Pet","Car","Trail","Glider","Shovel","Event","Primary","Backup","Melee","Special","Sniper","Premium","PortraitFrameUI","PortraitUI","ProfileBackgroundUI"];
 const ITEM_RARITIES=["Common","Rare","Epic","Legendary","Mythic"];
 const SALE_LOCATIONS=["Lottery","CardRoulette","AdsRoulette","PersonalEvent","TraderVan","Offer","PixelPass","TemplateEvent"];
 const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",AdsRoulette:"Ads Roulette",PersonalEvent:"Personal Event",TraderVan:"Trader Van",Offer:"Offer",PixelPass:"Pixel Pass",TemplateEvent:"Template Event"};
@@ -824,6 +824,22 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
     onItemsChange([...items,created]);setSelId(created.uid);
   };
   const removeItem=()=>{onItemsChange(items.filter(i=>i.uid!==selId));setSelId(null)};
+  const [importStatus,setImportStatus]=useState("");
+  const importFromSheet=async()=>{
+    setImportStatus("Загружаем…");
+    try{
+      const res=await fetch("/catalog-import.json");
+      if(!res.ok)throw new Error("файл не найден");
+      const rows=await res.json();
+      const existingTags=new Set(items.map(i=>i.tag).filter(Boolean));
+      const toAdd=rows.filter(r=>{const tag=r[1];return tag&&!existingTags.has(tag)}).map(r=>{
+        const [id,tag,name,type,icon]=r;
+        return {uid:`item-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,id,parts:"",tag,name,type,rarity:"",setting:"",lastSale:"",saleLocation:"",tier:"",sheetType:"",sheetRarity:"",sheetName:"",sheetLethality:"",sheetPrevalence:"",icon:icon?`/icons-items/${icon}`:"",eventIcon:""};
+      });
+      onItemsChange([...items,...toAdd]);
+      setImportStatus(`Добавлено ${toAdd.length} из ${rows.length} (пропущено как дубли: ${rows.length-toAdd.length})`);
+    }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
+  };
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
   const pickEventIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({eventIcon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
   const refreshTier=async()=>{
@@ -846,6 +862,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <SettingsManager settingsList={settingsList} onSettingsListChange={onSettingsListChange} items={items} onItemsChange={onItemsChange}/>
       <input value={listQuery} onChange={e=>setListQuery(e.target.value)} placeholder="Поиск по названию, id или tag…" style={{width:"100%",boxSizing:"border-box",marginBottom:8,padding:"8px 10px",background:"#1a1a20",border:`1px solid ${BRD}`,borderRadius:2,color:T1,fontSize:12,outline:"none"}}/>
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
+      <button className="settings-add" onClick={importFromSheet} style={{marginTop:6}}>Импорт из таблицы</button>
+      {importStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{importStatus}</div>}
       <div className="settings-list">{groupedByType.map(([type,groupItems])=>{
         const collapsed=collapsedTypes.has(type);
         return (
