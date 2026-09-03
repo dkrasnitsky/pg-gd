@@ -834,7 +834,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       if(result?.error){setImportStatus("Ошибка чтения таблицы: "+result.error);return}
       const fresh=await window.workspaceStore.read("items");
       if(Array.isArray(fresh))onItemsChange(fresh);
-      setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, подставлено иконок: ${result?.iconsFilled||0} (всего в каталоге: ${result?.total??items.length})`);
+      setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, иконок: ${result?.iconsFilled||0} (всего: ${result?.total??items.length}) | debug: строк в таблице=${result?.debug?.xlsxRows}, было тегов=${result?.debug?.previousBaselineSize}, стало тегов=${result?.debug?.currentTagsSize}, к удалению=${result?.debug?.removedTagsDetected}, bootstrap=${result?.debug?.bootstrapped}`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};

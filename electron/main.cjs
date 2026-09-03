@@ -626,10 +626,9 @@ async function runCatalogXlsxSync(){
   // among the categories this sync itself manages (never Weapon items or hand-made entries
   // that never came from this table).
   let previousTags=await readTagsBaseline();
+  let bootstrapped=false;
   if(previousTags===null){
-    // First run of this deletion-aware logic: bootstrap the baseline from whatever the
-    // catalog already has in these categories, so a table row removed just before this
-    // very sync is still caught.
+    bootstrapped=true;
     previousTags=new Set(existing.filter(i=>i.tag&&catalogSheetTypes.has(i.type)).map(i=>String(i.tag).toLowerCase()));
   }
   const removedTagSet=new Set([...previousTags].filter(t=>!currentTags.has(t)));
@@ -645,7 +644,10 @@ async function runCatalogXlsxSync(){
 
   await writeTagsBaseline(currentTags);
 
-  if(!added&&!iconsFilled&&!removed){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length}}
+  const debug={xlsxRows:seenTags.size,previousBaselineSize:previousTags.size,currentTagsSize:currentTags.size,removedTagsDetected:removedTagSet.size,bootstrapped,sampleRemovedTags:[...removedTagSet].slice(0,5)};
+  console.log("[catalog-sync] debug",debug);
+
+  if(!added&&!iconsFilled&&!removed){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length,debug}}
 
   const target=storePath("items");
   const temporary=`${target}.${process.pid}.${Date.now()}.catalog.tmp`;
@@ -653,7 +655,7 @@ async function runCatalogXlsxSync(){
   await fs.promises.writeFile(temporary,JSON.stringify(result),"utf8");
   await fs.promises.rename(temporary,target);
   console.log(`[catalog-sync] done: ${added} new items, ${iconsFilled} icons filled, ${removed} removed, ${result.length} total`);
-  return {added,iconsFilled,removed,total:result.length};
+  return {added,iconsFilled,removed,total:result.length,debug};
 }
 
 ipcMain.handle("catalog:sync-from-xlsx",async()=>runCatalogXlsxSync());
