@@ -769,8 +769,8 @@ async function createWindow(){
 
 app.whenReady().then(async()=>{
   await createWindow();
-  runWeaponAutoSync().catch(error=>console.error("[sync] failed",error));
-  runCatalogXlsxSync().catch(error=>console.error("[catalog-sync] failed",error));
+  runWeaponAutoSync().then(()=>mainWindow?.webContents.send("items:updated")).catch(error=>console.error("[sync] failed",error));
+  runCatalogXlsxSync().then(result=>{if(result&&(result.added||result.iconsFilled||result.removed))mainWindow?.webContents.send("items:updated")}).catch(error=>console.error("[catalog-sync] failed",error));
 });
 ipcMain.on("window:minimize",event=>BrowserWindow.fromWebContents(event.sender)?.minimize());
 ipcMain.on("window:toggle-maximize",event=>{const win=BrowserWindow.fromWebContents(event.sender);if(!win)return;win.isMaximized()?win.unmaximize():win.maximize()});

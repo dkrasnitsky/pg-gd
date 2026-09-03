@@ -832,10 +832,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       const result=await window.workspaceCatalog.syncFromXlsx();
       if(result?.skipped){setImportStatus("Файл таблицы не найден в data/PG3D_Items_by_Category_Name_Tag_Id.xlsx");return}
       if(result?.error){setImportStatus("Ошибка чтения таблицы: "+result.error);return}
-      if(result?.added||result?.iconsFilled||result?.removed){
-        const fresh=await window.workspaceStore.read("items");
-        if(Array.isArray(fresh))onItemsChange(fresh);
-      }
+      const fresh=await window.workspaceStore.read("items");
+      if(Array.isArray(fresh))onItemsChange(fresh);
       setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, подставлено иконок: ${result?.iconsFilled||0} (всего в каталоге: ${result?.total??items.length})`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
@@ -1174,6 +1172,12 @@ function AppShell(){
       setStoreReady(true);
     })().catch(error=>{console.error("Failed to load workspace settings",error);setStoreReady(true)});
     return()=>{cancelled=true};
+  },[]);
+  useEffect(()=>{
+    if(!window.workspaceStore?.onItemsUpdated)return;
+    return window.workspaceStore.onItemsUpdated(()=>{
+      window.workspaceStore.read("items").then(fresh=>{if(Array.isArray(fresh))setItems(fresh)}).catch(console.error);
+    });
   },[]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-workspace-v2",JSON.stringify({tabs,activeId}))}catch{/* Electron file storage remains authoritative */}window.workspaceStore?.write("workspace",{tabs,activeId}).catch(console.error)},[tabs,activeId,storeReady]);
   useEffect(()=>{if(!storeReady)return;try{localStorage.setItem("pg3d-navigation-v1",JSON.stringify(navigation))}catch{/* selected images can exceed the browser quota */}window.workspaceStore?.write("navigation",navigation).catch(console.error)},[navigation,storeReady]);

@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld("desktopWindow", {
 contextBridge.exposeInMainWorld("workspaceStore", {
   read: (key) => ipcRenderer.invoke("store:read", key),
   write: (key, value) => ipcRenderer.invoke("store:write", key, value),
+  onItemsUpdated: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("items:updated", listener);
+    return () => ipcRenderer.removeListener("items:updated", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("workspaceGoogle", {
