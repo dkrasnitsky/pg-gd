@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef, useCallback, Fragment } from "rea
 import LootboxSimulator from "./LootboxSimulator";
 import TimeTracker from "./TimeTracker";
 import LotterySimulator from "./LotterySimulator";
+import CardRouletteSimulator from "./CardRouletteSimulator";
+import PersonalEventSimulator from "./PersonalEventSimulator";
 import NotesPage from "./NotesPage";
 import EventCalendar from "./EventCalendar";
 import { VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore } from "react-icons/vsc";
@@ -12,7 +14,7 @@ const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a
 const STRIPE=`repeating-linear-gradient(135deg,transparent,transparent 4px,rgba(195,216,197,0.04) 4px,rgba(195,216,197,0.04) 5px),#303330`;
 const ZZZ="'ZZZBold','Integral CF',Impact,sans-serif";
 
-const JIRA_FILTER="19197";
+const JIRA_JQL="assignee = currentUser()";
 const JIRA_BASE="https://cubicgamesstudio.atlassian.net";
 const SHEETS_URL="https://docs.google.com/spreadsheets/d/1fGQnW1s9ueyhNxU7G2edY5hljQNUpKPZtRn_Qn-KsYM/edit?gid=1388976908#gid=1388976908";
 const SC={"To Do":"#3B82F6","In Progress":"#F59E0B","Done":"#22C55E","к выполнению":"#3B82F6","К выполнению":"#3B82F6","В работе":"#F59E0B","Готово":"#22C55E","Reopened":"#3B82F6","QA Verified":"#4faf72","Merged":"#4faf72","Need More Info":"#F59E0B","On Hold":"#6B7280","Ready to Testing":"#8B5CF6","В процессе проверки":"#8B5CF6","In Testing":"#8B5CF6","Открыто повторно":"#3B82F6","Закрыто":"#22C55E","Ready to Merge":"#4faf72"};
@@ -114,7 +116,7 @@ const SALE_LOCATION_LABEL={Lottery:"Lottery",CardRoulette:"Card Roulette",AdsRou
 const SALE_LOCATION_GLYPH={Lottery:"🎟",CardRoulette:"🎡",AdsRoulette:"📺",PersonalEvent:"👤",TraderVan:"🚐",Offer:"🏷",PixelPass:"🎫",TemplateEvent:"📋"};
 const RARITY_META={Common:{label:"Обычная",color:"#e5e5e5"},Rare:{label:"Редкая",color:"#3b82f6"},Epic:{label:"Эпическая",color:"#fbbf24"},Legendary:{label:"Легендарная",color:"#f97316"},Mythic:{label:"Мифическая",color:"#a855f7"}};
 function effectiveRarity(item){return item?.sheetRarity||item?.rarity||""}
-function effectiveName(item){return item?.name||item?.sheetName||""}
+function effectiveName(item){return item?.name||item?.realName||item?.sheetName||""}
 const WARNING_SETTINGS=["Кланы","Турниры","Anniversary","DLC"];
 function hasWarningSetting(item){
   const list=String(item?.setting||"").split(",").map(s=>s.trim());
@@ -232,14 +234,51 @@ function GoogleSheetsView(){
   </div>;
 }
 
+function JiraSetupForm({onDone}){
+  const [email,setEmail]=useState("");
+  const [token,setToken]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const submit=()=>{
+    if(!email.trim()||!token.trim()){setError("Укажите email и API-токен");return}
+    setBusy(true);setError("");
+    window.workspaceJira.setCredentials(email.trim(),token.trim()).then(res=>{setBusy(false);onDone(res)}).catch(e=>{setBusy(false);setError(e.message)});
+  };
+  return (
+    <div style={{padding:24,maxWidth:360}}>
+      <div style={{fontSize:13,fontWeight:700,color:T1,marginBottom:10}}>Подключите свой аккаунт Jira</div>
+      <div style={{fontSize:11,color:T2,marginBottom:14,lineHeight:1.5}}>Понадобится email и персональный API-токен. Создать токен: <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" style={{color:"#60A5FA"}}>id.atlassian.com</a>. Хранится только на этом компьютере.</div>
+      <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@cubicgames.com" style={{width:"100%",marginBottom:8,padding:"8px 10px",background:"#1a1a22",border:`1.5px solid ${BRD}`,borderRadius:0,color:T1,fontSize:12,boxSizing:"border-box"}}/>
+      <input value={token} onChange={e=>setToken(e.target.value)} type="password" placeholder="API токен" style={{width:"100%",marginBottom:8,padding:"8px 10px",background:"#1a1a22",border:`1.5px solid ${BRD}`,borderRadius:0,color:T1,fontSize:12,boxSizing:"border-box"}}/>
+      {error && <div style={{fontSize:11,color:DNG,marginBottom:8}}>{error}</div>}
+      <button onClick={submit} disabled={busy} style={{padding:"8px 16px",background:A,border:"none",borderRadius:0,color:"#000",fontSize:12,fontWeight:800,cursor:busy?"wait":"pointer"}}>{busy?"Проверка...":"Подключить"}</button>
+    </div>
+  );
+}
+
 function TasksTab({openIn,activeSection=0}){
   const [section,setSection]=useState(activeSection);const [tasks,setTasks]=useState([]);const [loading,setLoading]=useState(true);const [err,setErr]=useState(null);const [sortBy,setSortBy]=useState(null);const [showSort,setShowSort]=useState(false);const [selTask,setSelTask]=useState(null);
+  const [search,setSearch]=useState("");const [statusFilter,setStatusFilter]=useState("all");const [priorityFilter,setPriorityFilter]=useState("all");
   useEffect(()=>setSection(activeSection),[activeSection]);
-  const load=()=>{setLoading(true);fetch(`/jira-api/rest/api/2/search/jql?jql=filter=${JIRA_FILTER}&maxResults=50&fields=summary,status,priority,parent,duedate`,{headers:{"Accept":"application/json"}}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{setTasks(d.issues||[]);setLoading(false)}).catch(e=>{setErr(e.message);setLoading(false)})};
-  useEffect(()=>{load()},[]);
-  const sorted=useMemo(()=>{if(!sortBy)return tasks;const c=[...tasks];if(sortBy==="deadline")c.sort((a,b)=>(a.fields?.duedate||"9999").localeCompare(b.fields?.duedate||"9999"));if(sortBy==="status")c.sort((a,b)=>(S_ORDER[a.fields?.status?.name]??5)-(S_ORDER[b.fields?.status?.name]??5));return c},[tasks,sortBy]);
+  const [jiraStatus,setJiraStatus]=useState(null);
+  const load=()=>{setLoading(true);fetch(`/jira-api/rest/api/2/search/jql?jql=${encodeURIComponent(JIRA_JQL)}&maxResults=50&fields=summary,status,priority,parent,duedate`,{headers:{"Accept":"application/json"}}).then(r=>{if(r.status===401){setJiraStatus({configured:false});setLoading(false);return null}if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{if(d){setTasks(d.issues||[]);setLoading(false)}}).catch(e=>{setErr(e.message);setLoading(false)})};
+  useEffect(()=>{window.workspaceJira.getStatus().then(s=>{setJiraStatus(s);if(s.configured)load();else setLoading(false)})},[]);
+  const statusOptions=useMemo(()=>[...new Set(tasks.map(t=>t.fields?.status?.name).filter(Boolean))],[tasks]);
+  const priorityOptions=useMemo(()=>[...new Set(tasks.map(t=>t.fields?.priority?.name).filter(Boolean))],[tasks]);
+  const filtered=useMemo(()=>tasks.filter(t=>{
+    const f=t.fields||{};
+    if(statusFilter!=="all"&&f.status?.name!==statusFilter)return false;
+    if(priorityFilter!=="all"&&f.priority?.name!==priorityFilter)return false;
+    if(search.trim()){
+      const q=search.trim().toLowerCase();
+      if(!(t.key.toLowerCase().includes(q)||String(f.summary||"").toLowerCase().includes(q)))return false;
+    }
+    return true;
+  }),[tasks,statusFilter,priorityFilter,search]);
+  const sorted=useMemo(()=>{if(!sortBy)return filtered;const c=[...filtered];if(sortBy==="deadline")c.sort((a,b)=>(a.fields?.duedate||"9999").localeCompare(b.fields?.duedate||"9999"));if(sortBy==="status")c.sort((a,b)=>(S_ORDER[a.fields?.status?.name]??5)-(S_ORDER[b.fields?.status?.name]??5));return c},[filtered,sortBy]);
   if(section===1) return (<div style={{position:"relative",height:"100%"}}><Sidebar section={section} setSection={setSection} total={3}/><div style={{position:"absolute",left:54,top:0,right:0,bottom:0,borderRadius:16,overflow:"hidden",background:"#EFF0EF"}}><div style={{display:"flex",alignItems:"center",padding:"8px 14px",gap:8}}><div style={{width:3,height:16,background:A,borderRadius:1}}/><div style={{fontSize:13,fontWeight:800,fontFamily:ZZZ,color:"#000",letterSpacing:1,textTransform:"uppercase"}}>Google Sheets</div></div><div style={{margin:"0 8px 8px",borderRadius:12,overflow:"hidden",height:"calc(100% - 44px)"}}><GoogleSheetsView/></div></div></div>);
   if(section===2) return (<div style={{position:"relative",height:"100%"}}><Sidebar section={section} setSection={setSection} total={3}/><div style={{position:"absolute",left:54,top:0,right:0,bottom:0}}><TimeTracker/></div></div>);
+  if(jiraStatus&&!jiraStatus.configured) return (<div style={{position:"relative",height:"100%",display:"flex"}}><Sidebar section={section} setSection={setSection} total={3}/><div style={{flex:1,marginLeft:54,display:"flex",alignItems:"center",justifyContent:"center"}}><JiraSetupForm onDone={s=>{setJiraStatus(s);load()}}/></div></div>);
   return (
     <div className="tasks-page" style={{position:"relative",height:"100%",display:"flex"}}>
       <Sidebar section={section} setSection={setSection} total={3}/>
@@ -258,11 +297,22 @@ function TasksTab({openIn,activeSection=0}){
       </div>
       <div className="tasks-list-panel" style={{flex:1,background:BG,borderLeft:"1px solid #EFF0EF",borderRadius:"0 16px 16px 0",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"14px 16px 8px",display:"flex",alignItems:"center",gap:6}}>
-          <div style={{width:3,height:14,background:A,borderRadius:1}}/><div style={{fontSize:12,fontWeight:800,fontFamily:ZZZ,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>My tasks</div><div style={{flex:1}}/><a href={`${JIRA_BASE}/issues/?filter=${JIRA_FILTER}`} target="_blank" rel="noopener noreferrer" style={{fontSize:9,color:"#555",textDecoration:"none",marginRight:8}}>JIRA #{JIRA_FILTER} ↗</a>
+          <div style={{width:3,height:14,background:A,borderRadius:1}}/><div style={{fontSize:12,fontWeight:800,fontFamily:ZZZ,color:"#fff",letterSpacing:1,textTransform:"uppercase"}}>My tasks</div><div style={{flex:1}}/><a href={`${JIRA_BASE}/issues/?jql=${encodeURIComponent(JIRA_JQL)}`} target="_blank" rel="noopener noreferrer" style={{fontSize:9,color:"#555",textDecoration:"none",marginRight:8}}>Open in Jira ↗</a>
           <div style={{position:"relative"}}>
             <div onClick={()=>setShowSort(!showSort)} style={{width:28,height:28,background:A,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><svg width="14" height="14" viewBox="0 0 24 24" fill="#000"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></div>
             {showSort && (<div style={{position:"absolute",top:34,right:0,background:"#1a1a22",border:`1.5px solid ${BRD}`,borderRadius:10,padding:4,zIndex:20,minWidth:130,boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}><div onClick={()=>{setSortBy("deadline");setShowSort(false)}} style={{padding:"7px 12px",borderRadius:7,fontSize:11,color:sortBy==="deadline"?A:T1,fontWeight:sortBy==="deadline"?700:500,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=`${A}15`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>By deadline</div><div onClick={()=>{setSortBy("status");setShowSort(false)}} style={{padding:"7px 12px",borderRadius:7,fontSize:11,color:sortBy==="status"?A:T1,fontWeight:sortBy==="status"?700:500,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=`${A}15`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>By status</div>{sortBy && <div onClick={()=>{setSortBy(null);setShowSort(false)}} style={{padding:"7px 12px",borderRadius:7,fontSize:11,color:T2,cursor:"pointer",borderTop:`1px solid ${BRD}`,marginTop:2}} onMouseEnter={e=>e.currentTarget.style.background=`${A}15`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>Reset</div>}</div>)}
           </div>
+        </div>
+        <div style={{padding:"0 16px 10px",display:"flex",gap:6,flexWrap:"wrap"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по задачам..." style={{flex:1,minWidth:110,background:"#1a1a22",border:`1px solid ${BRD}`,borderRadius:0,color:T1,fontSize:11,padding:"6px 10px",outline:"none",boxSizing:"border-box"}}/>
+          <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{background:"#1a1a22",border:`1px solid ${BRD}`,borderRadius:0,color:T1,fontSize:11,padding:"6px 8px"}}>
+            <option value="all">Статус: все</option>
+            {statusOptions.map(s=><option key={s} value={s}>{sDisp(s)}</option>)}
+          </select>
+          <select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value)} style={{background:"#1a1a22",border:`1px solid ${BRD}`,borderRadius:0,color:T1,fontSize:11,padding:"6px 8px"}}>
+            <option value="all">Приоритет: все</option>
+            {priorityOptions.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"0 16px 10px"}}>
           {loading && <div style={{padding:30,textAlign:"center",color:T2,fontSize:12}}>Loading...</div>}
@@ -317,7 +367,7 @@ function ItemCard({item,onOpen}){
   );
 }
 
-function ItemDetail({item,onClose,onOpenLottery,onOpenItemSettings}){
+function ItemDetail({item,onClose,onOpenLottery,onOpenCardRoulette,onOpenItemSettings}){
   const isEvent=item.type==="Event";
   const rarity=isEvent?null:rarityMetaFor(effectiveRarity(item));
   const displayName=effectiveName(item);
@@ -340,6 +390,7 @@ function ItemDetail({item,onClose,onOpenLottery,onOpenItemSettings}){
           <div style={{display:"flex",flexDirection:"column",gap:10,minWidth:180}}>
             {rarity&&<span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:20,background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:700,color:T1,alignSelf:"flex-start"}}><span style={{width:7,height:7,borderRadius:"50%",background:rarity.color,flexShrink:0}}/>{rarity.label}</span>}
             {!isEvent&&onOpenLottery&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenLottery()}}>Lottery</button>}
+            {!isEvent&&onOpenCardRoulette&&<button type="button" className="primary-action" onClick={()=>{if(item.tag)navigator.clipboard?.writeText(item.tag).catch(()=>{});onOpenCardRoulette()}}>Card Roulette</button>}
           </div>
         </div>
         <div className="form-columns">
@@ -449,7 +500,7 @@ function RangeFilterDropdown({label,from,to,onFromChange,onToChange,align="left"
   );
 }
 
-function ContentPicker({items=[],settingsList=[],onOpenLottery,onOpenItemSettings}){
+function ContentPicker({items=[],settingsList=[],onOpenLottery,onOpenCardRoulette,onOpenItemSettings}){
   const [query,setQuery]=useState("");
   const [typeFilter,setTypeFilter]=useState(()=>new Set());
   const [rarityFilter,setRarityFilter]=useState(()=>new Set());
@@ -498,7 +549,7 @@ function ContentPicker({items=[],settingsList=[],onOpenLottery,onOpenItemSetting
   },[items,query,typeFilter,rarityFilter,tierFilter,settingFilter,lethalityFrom,lethalityTo,hasPartsFilter,hasActiveSearch]);
   return (
     <div style={{position:"relative"}}>
-      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onOpenLottery={onOpenLottery} onOpenItemSettings={onOpenItemSettings}/>}
+      {openItem&&<ItemDetail item={openItem} onClose={()=>setOpenItem(null)} onOpenLottery={onOpenLottery} onOpenCardRoulette={onOpenCardRoulette} onOpenItemSettings={onOpenItemSettings}/>}
       <div style={{position:"sticky",top:0,zIndex:25,background:BG,marginLeft:-24,marginRight:-24,paddingTop:18,paddingLeft:24,paddingRight:24,paddingBottom:14}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="id, parts, tag или название..." style={{flex:1,minWidth:220,background:"#1a1a20",border:`1.5px solid ${A}`,borderRadius:2,color:T1,padding:"10px 14px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
@@ -837,6 +888,17 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, иконок: ${result?.iconsFilled||0} (всего: ${result?.total??items.length}) | debug: строк в таблице=${result?.debug?.xlsxRows}, отмечено как «из таблицы» задним числом=${result?.debug?.markedExisting}`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
+  const [namesStatus,setNamesStatus]=useState("");
+  const syncRealNames=async()=>{
+    if(!window.workspaceCatalog){setNamesStatus("Синхронизация недоступна вне приложения");return}
+    setNamesStatus("Читаем ItemsDataStorage.asset и Language_English.prefab…");
+    try{
+      const result=await window.workspaceCatalog.syncRealNames();
+      const fresh=await window.workspaceStore.read("items");
+      if(Array.isArray(fresh))onItemsChange(fresh);
+      setNamesStatus(`Найдено оружия с именем: ${result?.matched||0}, обновлено записей: ${result?.updated||0} (всего в каталоге: ${result?.total??items.length})`);
+    }catch(e){setNamesStatus("Ошибка: "+e.message+" — проверь, что диск Z: с проектом игры подключён")}
+  };
   const pickIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({icon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
   const pickEventIcon=event=>{const file=event.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=()=>update({eventIcon:String(reader.result)});reader.readAsDataURL(file);event.target.value=""};
   const refreshTier=async()=>{
@@ -861,6 +923,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
       <button className="settings-add" onClick={importFromSheet} style={{marginTop:6}}>Обновить из таблицы</button>
       {importStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{importStatus}</div>}
+      <button className="settings-add" onClick={syncRealNames} style={{marginTop:6}}>Обновить названия (Unity)</button>
+      {namesStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{namesStatus}</div>}
       <div className="settings-list">{groupedByType.map(([type,groupItems])=>{
         const collapsed=collapsedTypes.has(type);
         return (
@@ -903,26 +967,28 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   </>;
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery,onOpenItemSettings}){
+function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery,onOpenCardRoulette,onOpenItemSettings}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
     <div className="tools-page" style={{height:"100%",background:BG,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div className="tools-feature-header">
-        <div><span>PROBABILITY LAB</span><h1>{activeTool==="content"?"Подбор Контента":activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":"Offer Constructor"}</h1></div>
+        <div><span>PROBABILITY LAB</span><h1>{activeTool==="content"?"Подбор Контента":activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":activeTool==="cardroulette"?"Card Roulette":activeTool==="personalevent"?"Personal Event":"Offer Constructor"}</h1></div>
         <div style={{flex:1}}/>
         {!hideSelector&&<div style={{display:"flex",background:BG,borderRadius:20,padding:3,border:`1px solid ${BRD}`}}>
-          {[["content","Подбор Контента"],["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"]].map(([k,l])=>(
+          {[["content","Подбор Контента"],["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"],["cardroulette","Card Roulette"],["personalevent","Personal Event"]].map(([k,l])=>(
             <button key={k} onClick={()=>setActiveTool(k)} style={{padding:"6px 16px",borderRadius:18,fontSize:11,fontWeight:700,fontFamily:ZZZ,fontStyle:"italic",cursor:"pointer",border:"none",background:activeTool===k?A:"transparent",color:activeTool===k?"#000":T2,transition:"all .2s"}}>{l}</button>
           ))}
         </div>}
       </div>
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"0 24px 24px"}}>
-          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery} onOpenItemSettings={onOpenItemSettings}/></div>
+          <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery} onOpenCardRoulette={onOpenCardRoulette} onOpenItemSettings={onOpenItemSettings}/></div>
           <div style={{display:activeTool==="offers"?"block":"none",paddingTop:18}}><OfferConstructor/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none",paddingTop:18}}><LootboxSimulator/></div>
           <div style={{display:activeTool==="lottery"?"block":"none",paddingTop:18}}><LotterySimulator/></div>
+          <div style={{display:activeTool==="cardroulette"?"block":"none",paddingTop:18}}><CardRouletteSimulator/></div>
+          <div style={{display:activeTool==="personalevent"?"block":"none",paddingTop:18}}><PersonalEventSimulator/></div>
         </div>
       </div>
     </div>
@@ -946,12 +1012,12 @@ const APP_SECTIONS=[
   {id:"configs",label:"Конфиги",icon:"config",builtIn:true,items:CONFIGS.map((item,index)=>({id:`config-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"files",label:"Файлы",icon:"home",builtIn:true,items:FILES.map((item,index)=>({id:item.url===SHEETS_URL?"event-sheet":`file-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"tools",label:"Инструменты",icon:"tools",builtIn:true,items:[
-    {id:"content",label:"Подбор Контента"},{id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"}
+    {id:"content",label:"Подбор Контента"},{id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"},{id:"cardroulette",label:"Card Roulette"},{id:"personalevent",label:"Personal Event"}
   ]},
 ];
 
-const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",content:"Подбор Контента",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator"};
-const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",content:"tools",offers:"tools",lootbox:"tools",lottery:"tools"};
+const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",content:"Подбор Контента",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator",cardroulette:"Card Roulette",personalevent:"Personal Event"};
+const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",content:"tools",offers:"tools",lootbox:"tools",lottery:"tools",cardroulette:"tools",personalevent:"tools"};
 
 function normalizeNavigation(source){
   const saved=Array.isArray(source)?source:[];
@@ -1135,6 +1201,43 @@ function loadWorkspace(){
   return migrateWorkspace(null);
 }
 
+function OnboardingScreen({googleConnected,jiraConfigured,onGoogleConnected,onJiraDone,onSkipJira}){
+  const [googleBusy,setGoogleBusy]=useState(false);
+  const [googleError,setGoogleError]=useState("");
+  const connectGoogle=()=>{
+    setGoogleBusy(true);setGoogleError("");
+    window.workspaceGoogle.connect().then(()=>{setGoogleBusy(false);onGoogleConnected()}).catch(e=>{setGoogleBusy(false);setGoogleError(e.message)});
+  };
+  return (
+    <div style={{position:"fixed",inset:0,background:BG,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+      <div style={{width:400,maxWidth:"90%"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><div style={{width:3,height:18,background:A}}/><div style={{fontSize:18,fontWeight:900,fontFamily:ZZZ,color:T1,letterSpacing:1,textTransform:"uppercase"}}>PG3D Workspace</div></div>
+        <div style={{fontSize:11,color:T2,marginBottom:20,lineHeight:1.5}}>Один раз войдите в сервисы — дальше приложение запомнит вас на этом компьютере.</div>
+        <div style={{marginBottom:14,padding:16,background:SRF,border:`1px solid ${googleConnected?"#22C55E":BRD}`,borderLeft:`3px solid ${googleConnected?"#22C55E":A}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:googleConnected?0:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:T1,flex:1,textTransform:"uppercase",letterSpacing:0.5}}>Google</div>
+            {googleConnected && <span style={{fontSize:11,color:"#22C55E",fontWeight:700}}>Подключено ✓</span>}
+          </div>
+          {!googleConnected && <>
+            <div style={{fontSize:11,color:T2,marginBottom:10,lineHeight:1.5}}>Нужен доступ к Google Sheets для записи конфигов. Откроется окно входа в браузере.</div>
+            {googleError && <div style={{fontSize:11,color:DNG,marginBottom:8}}>{googleError}</div>}
+            <button onClick={connectGoogle} disabled={googleBusy} style={{padding:"8px 16px",background:A,border:"none",borderRadius:0,color:"#000",fontSize:12,fontWeight:800,cursor:googleBusy?"wait":"pointer"}}>{googleBusy?"Ожидание авторизации...":"Войти через Google"}</button>
+          </>}
+        </div>
+        <div style={{padding:jiraConfigured?16:0,background:SRF,border:`1px solid ${jiraConfigured?"#22C55E":BRD}`,borderLeft:`3px solid ${jiraConfigured?"#22C55E":A}`}}>
+          {jiraConfigured
+            ? <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{fontSize:12,fontWeight:700,color:T1,flex:1,textTransform:"uppercase",letterSpacing:0.5}}>Jira</div><span style={{fontSize:11,color:"#22C55E",fontWeight:700}}>Подключено ✓</span></div>
+            : <>
+              <JiraSetupForm onDone={onJiraDone}/>
+              <div style={{padding:"0 24px 16px"}}><button onClick={onSkipJira} style={{padding:0,background:"transparent",border:"none",color:T2,fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Настроить позже</button></div>
+            </>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppShell(){
   if(typeof window!=="undefined")window.__PG3D_DESKTOP_SHELL__=true;
   const initial=useMemo(loadWorkspace,[]);
@@ -1149,6 +1252,14 @@ function AppShell(){
   const [collapsedGroups,setCollapsedGroups]=useState(()=>new Set());
   const toggleGroup=id=>setCollapsedGroups(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next});
   const [storeReady,setStoreReady]=useState(!window.workspaceStore);
+  const [onboarding,setOnboarding]=useState(null);
+  const [jiraSkipped,setJiraSkipped]=useState(false);
+  useEffect(()=>{
+    Promise.all([
+      window.workspaceGoogle?.getStatus?.().catch(()=>({connected:false}))||Promise.resolve({connected:false}),
+      window.workspaceJira?.getStatus?.().catch(()=>({configured:false}))||Promise.resolve({configured:false}),
+    ]).then(([g,j])=>setOnboarding({google:!!g.connected,jira:!!j.configured}));
+  },[]);
   const tabsScrollRef=useRef(null);
   const active=tabs.find(t=>t.id===activeId)||tabs[0];
   const activeSection=selectedSection;
@@ -1193,6 +1304,9 @@ function AppShell(){
   const openLottery=()=>{
     openPage("lottery");
   };
+  const openCardRoulette=()=>{
+    openPage("cardroulette");
+  };
   const openSettingsTab=()=>{
     const id="page-settings";
     setTabs(prev=>prev.some(t=>t.id===id)?prev:[...prev,{id,type:"settings",title:"Настройки",tabIcon:"⚙"}]);
@@ -1229,8 +1343,18 @@ function AppShell(){
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
     if(tab.page==="events")return <EventCalendar/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery} onOpenItemSettings={openItemSettings}/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery} onOpenCardRoulette={openCardRoulette} onOpenItemSettings={openItemSettings}/>;
   };
+
+  if(onboarding&&(!onboarding.google||(!onboarding.jira&&!jiraSkipped))){
+    return <OnboardingScreen
+      googleConnected={onboarding.google}
+      jiraConfigured={onboarding.jira}
+      onGoogleConnected={()=>setOnboarding(o=>({...o,google:true}))}
+      onJiraDone={()=>setOnboarding(o=>({...o,jira:true}))}
+      onSkipJira={()=>setJiraSkipped(true)}
+    />;
+  }
 
   return <div className="desktop-app">
     <aside className="app-sidebar">

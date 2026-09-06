@@ -28,13 +28,33 @@ contextBridge.exposeInMainWorld("workspaceStore", {
 });
 
 contextBridge.exposeInMainWorld("workspaceGoogle", {
+  getStatus: () => ipcRenderer.invoke("google:get-status"),
+  connect: () => ipcRenderer.invoke("google:connect"),
   createLotteryConfig: (title) => ipcRenderer.invoke("google:create-lottery-config", title),
   buildLotteryConfig: (sheetName, items) => ipcRenderer.invoke("google:build-lottery-config", sheetName, items),
   fetchTier: (tag) => ipcRenderer.invoke("google:fetch-tier", tag),
   getNextLotteryId: () => ipcRenderer.invoke("google:get-next-lottery-id"),
   getSegments: () => ipcRenderer.invoke("google:get-segments"),
+  getSegmentExpressions: () => ipcRenderer.invoke("google:get-segment-expressions"),
+  syncEventCenter: () => ipcRenderer.invoke("google:sync-event-center"),
   getRewardPools: () => ipcRenderer.invoke("google:get-reward-pools"),
   applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
+  getNextCardRouletteId: (isTest) => ipcRenderer.invoke("google:get-next-card-roulette-id", isTest),
+  applyCardRoulettePartition: (partition) => ipcRenderer.invoke("google:apply-card-roulette-partition", partition),
+  getNextPersonalEventId: (eventType) => ipcRenderer.invoke("google:get-next-personal-event-id", eventType),
+  applyPersonalEventBoard: (partition) => ipcRenderer.invoke("google:apply-personal-event-board", partition),
+  applyPersonalEventLinear: (partition) => ipcRenderer.invoke("google:apply-personal-event-linear", partition),
+  applyPersonalEventTasksHorizontal: (partition) => ipcRenderer.invoke("google:apply-personal-event-tasks-horizontal", partition),
+  applyPersonalEventTasksVertical: (partition) => ipcRenderer.invoke("google:apply-personal-event-tasks-vertical", partition),
+  applyPersonalEventTopUp: (partition) => ipcRenderer.invoke("google:apply-personal-event-topup", partition),
+  applyPersonalEventWheel: (partition) => ipcRenderer.invoke("google:apply-personal-event-wheel", partition),
+  getTaskReference: () => ipcRenderer.invoke("google:get-task-reference"),
+});
+
+contextBridge.exposeInMainWorld("workspaceJira", {
+  getStatus: () => ipcRenderer.invoke("jira:get-status"),
+  setCredentials: (email, token) => ipcRenderer.invoke("jira:set-credentials", email, token),
+  clearCredentials: () => ipcRenderer.invoke("jira:clear-credentials"),
 });
 
 contextBridge.exposeInMainWorld("iconLibrary", {
@@ -43,4 +63,5 @@ contextBridge.exposeInMainWorld("iconLibrary", {
 
 contextBridge.exposeInMainWorld("workspaceCatalog", {
   syncFromXlsx: () => ipcRenderer.invoke("catalog:sync-from-xlsx"),
+  syncRealNames: () => ipcRenderer.invoke("catalog:sync-real-names"),
 });

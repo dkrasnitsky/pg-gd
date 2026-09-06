@@ -9,7 +9,12 @@ const XLSX = require("xlsx");
 let localServer;
 let mainWindow;
 const workspacePartition="persist:pg3d-workspace";
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances"]);
+const cardRouletteSpreadsheetId="1onDfSBGSAnHqLTglpj0upGhBZCJrjkL50V03sVnlFrk";
+const cardRouletteTestSpreadsheetId="1lIRQ8FT0vWZcsgHwl1clhZrNuY2RxCGV7faf_0hl5JE";
+const cardRouletteScheduleGid=1041170058;
+const eventCenterCardRouletteGid=641877320;
+const eventCenterTestCardRouletteGid=387562133;
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const lotteryTestSpreadsheetId="10s8UQTOfFupR3afkyU0nmvKo_crLPjREHFTolesQK54";
@@ -20,19 +25,34 @@ const eventCenterTestSpreadsheetId="1ZNXorevxFq6Tlxbr9FjljuQXzM9jCv7KuIt7jbHz_uE
 const eventCenterLotteryGid=450520332;
 const eventCenterTestLotteryGid=1724060786;
 const segmentsSheetGid=1297452825;
+const eventCenterRouletteAdsGid=1035905528;
+const eventCenterTemplateEventGid=1195098988;
+const eventCenterPixelPassGid=1170504714;
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
 const contentPoolSpreadsheetId="1uOsaKGRCU1gghA5yGFDGXNl13bP5IwP5GnbO8VksLfM";
+const personalEventScheduleSpreadsheetId="12WklJDMluXtBqlRzJblNLVvxXqh86R4hKbdLw7Mm-KE";
+const personalEventBoardSpreadsheetId="18NncLI5KUdqG-j4C81P-smduV5Yz5yiUNU2IEquYX2Y";
+const personalEventLinearSpreadsheetId="1nW_7hBl2bcdJ_kvsp8QESkMgw6Fk1_wYclcPUKGHyKw";
+const personalEventTasksHorizontalSpreadsheetId="1WZ9VWAecfOlbDXtMCBrI0Up9h83YEXGj7T5Ouxxg7-E";
+const personalEventTasksVerticalSpreadsheetId="1aZWPsqRbPJSXjHQgxhsraQkugOi6VDrA8xUFnhmjOAw";
+const personalEventTopUpSpreadsheetId="1QGK9JE7gm1UGzg259O9uIoWaI3JkRkfj7uJPjjW-Fh0";
+const personalEventWheelSpreadsheetId="1mrxcDYCoFRh4hScGYjT85TSOig3UVPWB4qIbxpD0hJc";
+const taskReferenceSpreadsheetId="1woPA0mmXlRoTCjXwnOg2_D9n8Pveul2bWZYITgTwUOI";
+const taskReferenceGid=1207975760;
+const eventCenterPersonalizedEventGid=916675254;
+const eventCenterTestPersonalizedEventGid=1513551562;
 const weaponGeneratorPath="Z:\\pg3d\\Assets\\Scripts\\Item\\Generated\\ItemConverterId_clientToIndex.cs";
+const itemsDataStoragePath="Z:\\pg3d\\Assets\\Editor\\Resources\\CommonData\\ItemsDataStorage.asset";
+const languageEnglishPath="Z:\\pg3d\\Assets\\Editor\\Resources\\Localization\\Language_English.prefab";
 const catalogXlsxPath="C:\\Users\\Валерия\\Desktop\\pg3d-dashboard\\data\\PG3D_Items_by_Category_Name_Tag_Id.xlsx";
 const googleScope="https://www.googleapis.com/auth/spreadsheets";
-const jiraEmail="d.krasnitsky@cubicgames.com";
-const jiraToken="ATATT3xFfGF0jXXe_lR_N9tplVahKSSluupYeK023mk1EluThXO-IPe_jGD2P8ZIWzgUhzxpwXNRWYxrMY2XJwt-sAuAcHRBTMhsJ2zpGBKdSUBuw_xtw9ZYxiqqcl7EwapopQO7x5R-O4uf6GiipKDgSNDMW0qEycfHC-yMr55SkKg7DRvV66o=F4AB4211";
-const jiraAuth=Buffer.from(`${jiraEmail}:${jiraToken}`).toString("base64");
+const jiraHost="cubicgamesstudio.atlassian.net";
 
 function googleCredentialsPath(){return path.join(app.getPath("userData"),"google-oauth.json")}
 function googleTokenPath(){return path.join(app.getPath("userData"),"google-token.dat")}
+function defaultGoogleCredentialsPath(){return path.join(__dirname,"google-oauth-default.json")}
 
 async function selectGoogleCredentials(){
   const result=await dialog.showOpenDialog(mainWindow,{title:"Выберите OAuth-ключ Google",properties:["openFile"],filters:[{name:"Google OAuth JSON",extensions:["json"]}]});
@@ -45,6 +65,13 @@ async function selectGoogleCredentials(){
 
 async function readGoogleCredentials(){
   try{const data=JSON.parse(await fs.promises.readFile(googleCredentialsPath(),"utf8"));if(data.installed?.client_id)return data.installed}catch(error){if(error.code!=="ENOENT")throw error}
+  try{
+    const bundled=JSON.parse(await fs.promises.readFile(defaultGoogleCredentialsPath(),"utf8"));
+    if(bundled.installed?.client_id){
+      await fs.promises.writeFile(googleCredentialsPath(),JSON.stringify({installed:bundled.installed}),"utf8");
+      return bundled.installed;
+    }
+  }catch(error){if(error.code!=="ENOENT")throw error}
   return selectGoogleCredentials();
 }
 
@@ -61,6 +88,38 @@ async function readGoogleToken(){
     if(payload.startsWith("plain:"))return JSON.parse(Buffer.from(payload.slice(6),"base64").toString("utf8"));
   }catch(error){if(error.code!=="ENOENT")console.error("Failed to read Google token",error)}
   return null;
+}
+
+function jiraCredentialsPath(){return path.join(app.getPath("userData"),"jira-credentials.dat")}
+
+async function writeJiraCredentials(creds){
+  const serialized=Buffer.from(JSON.stringify(creds));
+  const payload=safeStorage.isEncryptionAvailable()?`encrypted:${safeStorage.encryptString(serialized.toString("utf8")).toString("base64")}`:`plain:${serialized.toString("base64")}`;
+  await fs.promises.writeFile(jiraCredentialsPath(),payload,"utf8");
+}
+
+async function readJiraCredentials(){
+  try{
+    const payload=await fs.promises.readFile(jiraCredentialsPath(),"utf8");
+    if(payload.startsWith("encrypted:"))return JSON.parse(safeStorage.decryptString(Buffer.from(payload.slice(10),"base64")));
+    if(payload.startsWith("plain:"))return JSON.parse(Buffer.from(payload.slice(6),"base64").toString("utf8"));
+  }catch(error){if(error.code!=="ENOENT")console.error("Failed to read Jira credentials",error)}
+  return null;
+}
+
+async function verifyJiraCredentials(email,token){
+  const auth=Buffer.from(`${email}:${token}`).toString("base64");
+  return new Promise((resolve,reject)=>{
+    const req=https.request({hostname:jiraHost,path:"/rest/api/2/myself",method:"GET",headers:{authorization:`Basic ${auth}`,accept:"application/json"}},res=>{
+      let body="";res.on("data",chunk=>body+=chunk);
+      res.on("end",()=>{
+        if(res.statusCode>=200&&res.statusCode<300){try{resolve(JSON.parse(body))}catch{resolve({})}}
+        else reject(new Error(`Jira отклонил учётные данные (HTTP ${res.statusCode})`));
+      });
+    });
+    req.on("error",reject);
+    req.end();
+  });
 }
 
 async function tokenRequest(credentials,params){
@@ -113,10 +172,19 @@ async function getGoogleAccessToken(){
 }
 
 async function sheetsRequest(accessToken,url,options={}){
-  const response=await fetch(url,{...options,headers:{authorization:`Bearer ${accessToken}`,"content-type":"application/json",...(options.headers||{})}});
-  const body=await response.json();
-  if(!response.ok)throw new Error(body.error?.message||"Google Sheets API завершился ошибкой");
-  return body;
+  let lastError;
+  for(let attempt=0;attempt<3;attempt++){
+    const response=await fetch(url,{...options,headers:{authorization:`Bearer ${accessToken}`,"content-type":"application/json",...(options.headers||{})}});
+    const body=await response.json();
+    if(response.ok)return body;
+    const status=response.status;
+    const message=body.error?.message||"Google Sheets API завершился ошибкой";
+    lastError=new Error(message);
+    const retryable=status===503||status===429||status>=500;
+    if(!retryable||attempt===2)throw lastError;
+    await new Promise(resolve=>setTimeout(resolve,400*(attempt+1)));
+  }
+  throw lastError;
 }
 
 function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
@@ -291,6 +359,16 @@ async function appendLotteryRow(accessToken,spreadsheetId,lotteryGid,overrides){
   await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
 }
 
+ipcMain.handle("google:get-status",async()=>{
+  const token=await readGoogleToken();
+  return {connected:!!(token&&token.refresh_token)};
+});
+
+ipcMain.handle("google:connect",async()=>{
+  await getGoogleAccessToken();
+  return {connected:true};
+});
+
 ipcMain.handle("google:create-lottery-config",async(_event,title)=>{
   const base=String(title||"").replace(/\s+/g,"");
   if(!base)throw new Error("Укажите название элемента");
@@ -334,6 +412,23 @@ ipcMain.handle("google:get-segments",async()=>{
   return [...new Set(col.map(v=>String(v||"").trim()).filter(Boolean))];
 });
 
+ipcMain.handle("google:get-segment-expressions",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${eventCenterSpreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===segmentsSheetGid);
+  if(!sheet)return {};
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const resp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!B2:C10000`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=resp.values||[];
+  const map={};
+  for(const row of rows){
+    const name=String(row[0]||"").trim();
+    if(name&&map[name]===undefined)map[name]=String(row[1]||"");
+  }
+  return map;
+});
+
 ipcMain.handle("google:get-reward-pools",async()=>{
   const accessToken=await getGoogleAccessToken();
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${contentPoolSpreadsheetId}`;
@@ -368,6 +463,792 @@ ipcMain.handle("google:apply-lottery-partition",async(_event,partition)=>{
     await buildLotteryConfigInSheet(accessToken,lotterySpId,names[0],balanceItems);
   }
   return {names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${lotterySpId}/edit`};
+});
+
+function chestAttributeId(chestNumber){return 90000+Number(chestNumber)*1000+201}
+
+async function duplicateCardRouletteTemplateSheets(accessToken,spreadsheetId,base){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title,index)`);
+  const templates=[{source:"Settings_Template",name:`Settings_${base}`},{source:"Chests_Template",name:`Chests_${base}`}];
+  const sheets=new Map((spreadsheet.sheets||[]).map(sheet=>[sheet.properties.title,sheet.properties]));
+  const missing=templates.filter(template=>!sheets.has(template.source)).map(template=>template.source);
+  if(missing.length)throw new Error(`Не найдены дефолтные листы: ${missing.join(", ")}`);
+  const conflicts=templates.filter(template=>sheets.has(template.name)).map(template=>template.name);
+  if(conflicts.length)throw new Error(`Листы уже существуют: ${conflicts.join(", ")}`);
+  await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:templates.map(template=>({duplicateSheet:{sourceSheetId:sheets.get(template.source).sheetId,newSheetName:template.name}})).reverse()})});
+  return {settings:templates[0].name,chests:templates[1].name};
+}
+
+async function appendCardRouletteScheduleRow(accessToken,spreadsheetId,scheduleGid,overrides){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===scheduleGid);
+  if(!sheet)throw new Error("Лист Schedule не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const allResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=allResp.values||[];
+  if(rows.length<2)throw new Error("На листе Schedule нет строк для копирования");
+  const lastRow=[...rows[rows.length-1]];
+  while(lastRow.length<6)lastRow.push("");
+  lastRow[1]=overrides.uniqueId;
+  lastRow[4]=overrides.sheetName;
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
+}
+
+async function buildCardRouletteSettingsInSheet(accessToken,spreadsheetId,sheetName,settings){
+  const title=String(sheetName||"").trim();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.title===title);
+  if(!sheet)throw new Error(`Лист «${title}» не найден`);
+  const quotedTitle=`'${title.replace(/'/g,"''")}'`;
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=valuesResponse.values||[];
+  const required=["UniqueId","Style","FirstOpenDiscount","OpenPrices","ChestIds","AttributeIds","LevelOpen"];
+  const headerIndex=rows.findIndex(row=>required.every(header=>row.includes(header)));
+  if(headerIndex<0)throw new Error(`На листе «${title}» не найдены поля: ${required.join(", ")}`);
+  const header=rows[headerIndex];
+  const columns=Object.fromEntries(required.map(name=>[name,header.indexOf(name)]));
+  const targetRow=headerIndex+2;
+  const data=required.map(name=>({range:`${quotedTitle}!${colLetter(columns[name])}${targetRow}`,values:[[settings[name]??""]]}));
+  await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+async function buildCardRouletteChestsInSheet(accessToken,spreadsheetId,sheetName,chests){
+  const title=String(sheetName||"").trim();
+  if(!title)throw new Error("Введите название листа");
+  if(!Array.isArray(chests)||!chests.length)throw new Error("В симуляторе нет данных для записи");
+
+  const normalized=[];
+  for(const chest of chests){
+    const chestId=Number(chest.chestNumber);
+    const attributeId=chestAttributeId(chestId);
+    for(const item of chest.items||[]){
+      const cellId=Number(item.cellId);
+      normalized.push({
+        chestId,cellId,
+        item:`${item.itemType||""}:${item.itemValue||""}:${item.itemCount??""}`,
+        altItem:item.altItemType||item.altItemValue||item.altItemCount!==undefined&&item.altItemCount!==""?`${item.altItemType||""}:${item.altItemValue||""}:${item.altItemCount??""}`:"",
+        dropChance:Number(item.dropChance??1),
+        previewed:!!item.previewed,
+        cool:!!item.cool,
+        showInPreview:!!item.showInPreview,
+        expression:item.expressionValue!==undefined&&item.expressionValue!==""?`${attributeId}:GreaterEqual:${item.expressionValue}`:"",
+      });
+    }
+  }
+  if(normalized.some(item=>!Number.isInteger(item.chestId)||!Number.isInteger(item.cellId)||!Number.isFinite(item.dropChance)))throw new Error("В симуляторе есть некорректные ID сундука/ячейки или числовые значения");
+
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.title===title);
+  if(!sheet)throw new Error(`Лист «${title}» не найден`);
+  const sheetId=sheet.properties.sheetId;
+
+  const quotedTitle=`'${title.replace(/'/g,"''")}'`;
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=valuesResponse.values||[];
+  const required=["ChestId","CellId","Item","AlterItem","DropChance","Previewed","Cool","ShowInPreview","Expression"];
+  const headerIndex=rows.findIndex(row=>required.every(header=>row.includes(header)));
+  if(headerIndex<0)throw new Error(`На листе «${title}» не найдены поля: ${required.join(", ")}`);
+  const header=rows[headerIndex];
+  const columns=Object.fromEntries(required.map(name=>[name,header.indexOf(name)]));
+
+  const blocks=new Map();
+  for(const item of normalized){if(!blocks.has(item.chestId))blocks.set(item.chestId,[]);blocks.get(item.chestId).push(item)}
+  for(const arr of blocks.values())arr.sort((a,b)=>a.cellId-b.cellId);
+
+  let lastChestId=null;
+  const dataRows=rows.slice(headerIndex+1).map((row,i)=>{
+    const raw=row[columns.ChestId];
+    const isBlank=raw===undefined||raw===null||raw==="";
+    if(!isBlank&&Number.isFinite(Number(raw)))lastChestId=Number(raw);
+    return {sheetRow:headerIndex+2+i,chestId:lastChestId};
+  }).filter(r=>r.chestId!==null);
+  const existingBlocks=new Map();
+  for(const r of dataRows){if(!existingBlocks.has(r.chestId))existingBlocks.set(r.chestId,[]);existingBlocks.get(r.chestId).push(r)}
+  for(const arr of existingBlocks.values())arr.sort((a,b)=>a.sheetRow-b.sheetRow);
+
+  const notFoundBlocks=[...blocks.keys()].filter(b=>!existingBlocks.has(b));
+  if(notFoundBlocks.length)throw new Error(`На листе не найден блок строк для сундука №${notFoundBlocks.join(", ")} — авто-создание нового сундука не поддерживается`);
+
+  const structRequests=[];
+  for(const [chestId,chestItems] of blocks){
+    const existing=existingBlocks.get(chestId);
+    const needed=chestItems.length;
+    const have=existing.length;
+    if(have>needed){
+      const toDelete=existing.slice(needed);
+      const startIndex=toDelete[0].sheetRow-1;
+      const endIndex=toDelete[toDelete.length-1].sheetRow;
+      structRequests.push({sortRow:startIndex,requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]});
+    }else if(have<needed){
+      const missing=needed-have;
+      const lastRow=existing[existing.length-1].sheetRow;
+      structRequests.push({sortRow:lastRow,requests:[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex:lastRow,endIndex:lastRow+missing},inheritFromBefore:true}}]});
+    }
+  }
+  if(structRequests.length){
+    structRequests.sort((a,b)=>b.sortRow-a.sortRow);
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:structRequests.flatMap(r=>r.requests)})});
+  }
+
+  const blocksByOriginalOrder=[...blocks.keys()].sort((a,b)=>existingBlocks.get(a)[0].sheetRow-existingBlocks.get(b)[0].sheetRow);
+  const blockStarts=[];
+  let cumulativeDelta=0;
+  for(const chestId of blocksByOriginalOrder){
+    const existing=existingBlocks.get(chestId);
+    const needed=blocks.get(chestId).length;
+    const have=existing.length;
+    blockStarts.push({chestId,startRow:existing[0].sheetRow+cumulativeDelta});
+    cumulativeDelta+=(needed-have);
+  }
+
+  const data=[];
+  for(const {chestId,startRow}of blockStarts){
+    const chestItems=blocks.get(chestId);
+    chestItems.forEach((item,index)=>{
+      const row=startRow+index;
+      data.push({range:`${quotedTitle}!${colLetter(columns.ChestId)}${row}`,values:[[index===0?item.chestId:""]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.CellId)}${row}`,values:[[item.cellId]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.Item)}${row}`,values:[[item.item]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.AlterItem)}${row}`,values:[[item.altItem]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.DropChance)}${row}`,values:[[item.dropChance]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.Previewed)}${row}`,values:[[item.previewed]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.Cool)}${row}`,values:[[item.cool]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.ShowInPreview)}${row}`,values:[[item.showInPreview]]});
+      data.push({range:`${quotedTitle}!${colLetter(columns.Expression)}${row}`,values:[[item.expression]]});
+    });
+  }
+  await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+  return{updated:normalized.length,sheetName:title};
+}
+
+async function readSheetValues(accessToken,spreadsheetId,title){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const quotedTitle=`'${title.replace(/'/g,"''")}'`;
+  const resp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  return {rows:resp.values||[],quotedTitle,api};
+}
+
+async function findLatestNumberedSheet(accessToken,spreadsheetId,prefix){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  let best=null;
+  for(const sheet of spreadsheet.sheets||[]){
+    const title=sheet.properties.title;
+    if(!title.startsWith(prefix))continue;
+    const suffix=title.slice(prefix.length);
+    if(!/^\d+$/.test(suffix))continue;
+    const number=Number(suffix);
+    if(!best||number>best.number)best={title,sheetId:sheet.properties.sheetId,number};
+  }
+  if(!best)throw new Error(`Не найден ни один лист с префиксом ${prefix}`);
+  return best;
+}
+
+async function duplicatePersonalEventSheets(accessToken,spreadsheetId,prefixes,newId){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title,index)`);
+  const allSheets=spreadsheet.sheets||[];
+  const found=prefixes.map(prefix=>{
+    let best=null;
+    for(const sheet of allSheets){
+      const title=sheet.properties.title;
+      if(!title.startsWith(prefix))continue;
+      const suffix=title.slice(prefix.length);
+      if(!/^\d+$/.test(suffix))continue;
+      const number=Number(suffix);
+      if(!best||number>best.number)best={title,sheetId:sheet.properties.sheetId,number};
+    }
+    if(!best)throw new Error(`Не найден ни один лист с префиксом ${prefix}`);
+    return best;
+  });
+  const names={};
+  const requests=found.map((sheet,i)=>{
+    const newName=`${prefixes[i]}${newId}`;
+    names[prefixes[i]]=newName;
+    return {duplicateSheet:{sourceSheetId:sheet.sheetId,newSheetName:newName}};
+  }).reverse();
+  await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests})});
+  return names;
+}
+
+async function getNextPersonalEventId(accessToken,eventType){
+  const spreadsheetId=personalEventScheduleSpreadsheetId;
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheetTitle=meta.sheets?.[0]?.properties?.title;
+  if(!sheetTitle)throw new Error("Не найден лист в таблице Schedule (Personal Event)");
+  const {rows}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const headerIdx=rows.findIndex(row=>row.includes("IsEnable")&&row.includes("EventType")&&row.includes("Id"));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы Schedule");
+  const header=rows[headerIdx];
+  const typeCol=header.indexOf("EventType"),idCol=header.indexOf("Id");
+  let maxId=0,lastMatchRow=null;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row[typeCol]!==eventType)continue;
+    const idVal=Number(row[idCol]);
+    if(Number.isFinite(idVal)&&idVal>maxId){maxId=idVal;lastMatchRow=row}
+  }
+  return {nextId:maxId+1,header,lastMatchRow,sheetTitle,headerIdx};
+}
+
+async function appendPersonalEventScheduleRow(accessToken,eventType,newId,overrides){
+  const spreadsheetId=personalEventScheduleSpreadsheetId;
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const {header,lastMatchRow,sheetTitle}=await getNextPersonalEventId(accessToken,eventType);
+  const quotedTitle=`'${sheetTitle.replace(/'/g,"''")}'`;
+  const template=lastMatchRow?[...lastMatchRow]:header.map(()=>"");
+  while(template.length<header.length)template.push("");
+  const setCol=(name,value)=>{const c=header.indexOf(name);if(c>=0&&value!==undefined)template[c]=value};
+  setCol("IsEnable",false);
+  setCol("Id",newId);
+  setCol("EventType",eventType);
+  setCol("StartDistributionDate",overrides.startDate);
+  setCol("EndDistributionDate",overrides.endDate);
+  setCol("Expression",overrides.expression);
+  setCol("GroupId",overrides.groupId);
+  setCol("Примечание GD",overrides.note);
+  setCol("EndCompletionDate",overrides.endCompletionDate);
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[template]})});
+}
+
+async function appendPersonalizedEventRow(accessToken,spreadsheetId,gid,fields){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(s=>s.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист PersonalizedEvent не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const resp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const rows=resp.values||[];
+  if(!rows.length)throw new Error("Лист PersonalizedEvent пуст");
+  const lastRow=[...rows[rows.length-1]];
+  while(lastRow.length<9)lastRow.push("");
+  lastRow[2]=fields.eventId;
+  lastRow[3]=fields.startDate;
+  lastRow[4]=fields.endDate;
+  lastRow[5]=fields.segment||"";
+  lastRow[6]=fields.groupId??"";
+  lastRow[8]=fields.style||"";
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
+}
+
+async function readEventCenterTab(accessToken,gid,typeLabel){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${eventCenterSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)return [];
+  const {rows}=await readSheetValues(accessToken,eventCenterSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("EventId")&&(row.includes("StartDate")||row.includes("StartDistributionDate")));
+  if(headerIdx<0)return [];
+  const header=rows[headerIdx];
+  const idCol=header.indexOf("EventId");
+  const startCol=header.indexOf("StartDate")>=0?header.indexOf("StartDate"):header.indexOf("StartDistributionDate");
+  const endCol=header.indexOf("EndDate")>=0?header.indexOf("EndDate"):header.indexOf("EndDistributionDate");
+  const segCol=header.indexOf("Segment");
+  const styleCol=header.indexOf("Style");
+  const normalizeSheetDate=value=>{
+    if(typeof value==="string"){
+      const trimmed=value.trim();
+      return (/^\d{4}-\d{2}-\d{2}/.test(trimmed)&&!Number.isNaN(new Date(trimmed).getTime()))?trimmed:null;
+    }
+    if(typeof value==="number"&&Number.isFinite(value)){
+      const ms=Date.UTC(1899,11,30)+value*86400000;
+      const d=new Date(ms);
+      if(Number.isNaN(d.getTime()))return null;
+      const pad=n=>String(n).padStart(2,"0");
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+    }
+    return null;
+  };
+  const results=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row[idCol]===undefined||row[idCol]==="")continue;
+    const startNormalized=normalizeSheetDate(row[startCol]);
+    if(!startNormalized)continue;
+    const endNormalized=normalizeSheetDate(row[endCol])||startNormalized;
+    results.push({
+      type:typeLabel,
+      eventId:String(row[idCol]),
+      start:startNormalized,
+      end:endNormalized,
+      segment:segCol>=0?String(row[segCol]||""):"",
+      style:styleCol>=0?String(row[styleCol]||""):"",
+    });
+  }
+  return results;
+}
+
+ipcMain.handle("google:sync-event-center",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const tabs=[
+    {gid:eventCenterLotteryGid,type:"Lottery"},
+    {gid:eventCenterCardRouletteGid,type:"Card Roulette"},
+    {gid:eventCenterRouletteAdsGid,type:"Ads Roulette"},
+    {gid:eventCenterTemplateEventGid,type:"Template Event"},
+    {gid:eventCenterPersonalizedEventGid,type:"Personal Event"},
+    {gid:eventCenterPixelPassGid,type:"Pixel Pass"},
+  ];
+  let all=[];
+  for(const tab of tabs){
+    const rows=await readEventCenterTab(accessToken,tab.gid,tab.type);
+    all=all.concat(rows);
+  }
+  const cutoff=new Date(new Date().getFullYear(),0,1);
+  const filtered=all.filter(row=>{
+    const d=new Date(row.start);
+    return !Number.isNaN(d.getTime())&&d>=cutoff;
+  });
+  const groups=new Map();
+  for(const row of filtered){
+    const key=`${row.type}|${row.style}|${row.start}|${row.end}`;
+    if(!groups.has(key))groups.set(key,{type:row.type,style:row.style,start:row.start,end:row.end,eventIds:[],segments:[]});
+    const group=groups.get(key);
+    group.eventIds.push(row.eventId);
+    if(row.segment)group.segments.push(row.segment);
+  }
+  return [...groups.values()];
+});
+
+const BOARD_META_FIELDS=["EventId","Style","MechanicIds","InfoStageDuration","ActiveStageDuration","AddedStageDuration","TimeUntilEndActiveStageForPopUp","MainPrefabName","NotificationPrefabName","LobbyButtonPrefabName","InfoPrefabName","InfoPopupPreviewRewards"];
+const BOARD_NOTIF_FIELDS=["StartInfoStage","StartActiveStage","BeforeEndActiveStage","StartAddedStage","EndEvent"];
+
+async function writeBoardCommonSheet(accessToken,spreadsheetId,sheetTitle,fields){
+  const {rows,quotedTitle,api}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const metaHeaderIdx=rows.findIndex(row=>row.includes("EventId")&&row.includes("InfoPopupPreviewRewards"));
+  if(metaHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найдена мета-таблица (EventId/InfoPopupPreviewRewards)`);
+  const metaHeader=rows[metaHeaderIdx];
+  const metaDataRow=metaHeaderIdx+2;
+  const data=[];
+  for(const name of BOARD_META_FIELDS){
+    if(fields[name]===undefined)continue;
+    const col=metaHeader.indexOf(name);
+    if(col<0)continue;
+    data.push({range:`${quotedTitle}!${colLetter(col)}${metaDataRow}`,values:[[fields[name]]]});
+  }
+  const notifLabelIdx=rows.findIndex((row,i)=>i>metaHeaderIdx&&String(row[0]||"").trim()==="NotificationBanners");
+  if(notifLabelIdx>=0){
+    const notifHeader=rows[notifLabelIdx+1]||[];
+    const notifDataRow=notifLabelIdx+3;
+    for(const name of BOARD_NOTIF_FIELDS){
+      if(fields[name]===undefined)continue;
+      const col=notifHeader.indexOf(name);
+      if(col<0)continue;
+      data.push({range:`${quotedTitle}!${colLetter(col)}${notifDataRow}`,values:[[fields[name]?"TRUE":"FALSE"]]});
+    }
+  }
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+async function writeBoardProgressSheet(accessToken,spreadsheetId,sheetTitle,priceFields,rewardRows){
+  const {rows,quotedTitle,api}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const sheetsMeta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheetId=(sheetsMeta.sheets||[]).find(s=>s.properties.title===sheetTitle)?.properties.sheetId;
+  if(sheetId===undefined)throw new Error(`Лист «${sheetTitle}» не найден`);
+
+  const priceHeaderIdx=rows.findIndex(row=>row.includes("OpenCellPrice")&&row.includes("SpinType"));
+  if(priceHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найден блок OpenCellPrice/SpinType`);
+  const priceHeader=rows[priceHeaderIdx];
+  const priceDataRow=priceHeaderIdx+2;
+  const data=[];
+  for(const name of ["OpenCellPrice","GemsOpenCellPrice","PriceMultiplier1","SpinType"]){
+    if(priceFields[name]===undefined)continue;
+    const col=priceHeader.indexOf(name);
+    if(col<0)continue;
+    data.push({range:`${quotedTitle}!${colLetter(col)}${priceDataRow}`,values:[[priceFields[name]]]});
+  }
+
+  const rewardHeaderIdx=rows.findIndex((row,i)=>i>priceHeaderIdx&&row.includes("Id")&&row.includes("Reward")&&row.includes("AlternateReward")&&row.includes("DropChance"));
+  if(rewardHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найдена таблица наград`);
+  const rewardHeader=rows[rewardHeaderIdx];
+  const columns=Object.fromEntries(["Id","Reward","AlternateReward","BuyLimit","DropChance","Cool","ShowInPreview"].map(name=>[name,rewardHeader.indexOf(name)]));
+
+  let existingCount=0;
+  for(let i=rewardHeaderIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row.every(cell=>cell===""||cell===undefined))break;
+    existingCount++;
+  }
+  const needed=rewardRows.length;
+  const firstDataSheetRow=rewardHeaderIdx+2;
+  if(existingCount>needed){
+    const startIndex=rewardHeaderIdx+1+needed;
+    const endIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]})});
+  }else if(existingCount<needed){
+    const missing=needed-existingCount;
+    const startIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex:startIndex+missing},inheritFromBefore:existingCount>0}}]})});
+  }
+
+  rewardRows.forEach((item,index)=>{
+    const row=firstDataSheetRow+index;
+    data.push({range:`${quotedTitle}!${colLetter(columns.Id)}${row}`,values:[[item.id]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Reward)}${row}`,values:[[item.reward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.AlternateReward)}${row}`,values:[[item.alternateReward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.BuyLimit)}${row}`,values:[[item.buyLimit??""]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.DropChance)}${row}`,values:[[item.dropChance]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Cool)}${row}`,values:[[!!item.cool]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.ShowInPreview)}${row}`,values:[[!!item.showInPreview]]});
+  });
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+ipcMain.handle("google:get-next-personal-event-id",async(_event,eventType)=>{
+  const accessToken=await getGoogleAccessToken();
+  const {nextId,lastMatchRow,header}=await getNextPersonalEventId(accessToken,eventType);
+  const pick=name=>{const c=header.indexOf(name);return c>=0&&lastMatchRow?lastMatchRow[c]:undefined};
+  return {nextId,lastGroupId:pick("GroupId")??"",lastNote:pick("Примечание GD")||""};
+});
+
+ipcMain.handle("google:apply-personal-event-board",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,openCellPrice,gemsOpenCellPrice,priceMultiplier1,spinType,rewards,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"Board");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventBoardSpreadsheetId,["Common_PersonalDrawerOfFortune","Progress_Wheel_PersonalDrawerOfFortune"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventBoardSpreadsheetId,names["Common_PersonalDrawerOfFortune"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeBoardProgressSheet(accessToken,personalEventBoardSpreadsheetId,names["Progress_Wheel_PersonalDrawerOfFortune"],
+    {OpenCellPrice:openCellPrice,GemsOpenCellPrice:gemsOpenCellPrice,PriceMultiplier1:priceMultiplier1,SpinType:spinType},rewards);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"Board",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+async function writeLinearProgressSheet(accessToken,spreadsheetId,sheetTitle,expFields,rewardRows){
+  const {rows,quotedTitle,api}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const sheetsMeta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheetId=(sheetsMeta.sheets||[]).find(s=>s.properties.title===sheetTitle)?.properties.sheetId;
+  if(sheetId===undefined)throw new Error(`Лист «${sheetTitle}» не найден`);
+
+  const expHeaderIdx=rows.findIndex(row=>row.includes("ItemExp"));
+  if(expHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найден блок ItemExp`);
+  const expHeader=rows[expHeaderIdx];
+  const expDataRow=expHeaderIdx+2;
+  const data=[];
+  for(const name of ["ItemExp","Boost","CurrencyToXP"]){
+    if(expFields[name]===undefined)continue;
+    const col=expHeader.indexOf(name);
+    if(col<0)continue;
+    data.push({range:`${quotedTitle}!${colLetter(col)}${expDataRow}`,values:[[expFields[name]]]});
+  }
+
+  const rewardHeaderIdx=rows.findIndex((row,i)=>i>expHeaderIdx&&row.includes("Id")&&row.includes("Reward")&&row.includes("AlternateReward")&&row.includes("XPAmount"));
+  if(rewardHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найдена таблица наград`);
+  const rewardHeader=rows[rewardHeaderIdx];
+  const columns=Object.fromEntries(["Id","Reward","AlternateReward","XPAmount","Cool","ShowInPreview"].map(name=>[name,rewardHeader.indexOf(name)]));
+
+  let existingCount=0;
+  for(let i=rewardHeaderIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row.every(cell=>cell===""||cell===undefined))break;
+    existingCount++;
+  }
+  const needed=rewardRows.length;
+  const firstDataSheetRow=rewardHeaderIdx+2;
+  if(existingCount>needed){
+    const startIndex=rewardHeaderIdx+1+needed;
+    const endIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]})});
+  }else if(existingCount<needed){
+    const missing=needed-existingCount;
+    const startIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex:startIndex+missing},inheritFromBefore:existingCount>0}}]})});
+  }
+
+  rewardRows.forEach((item,index)=>{
+    const row=firstDataSheetRow+index;
+    data.push({range:`${quotedTitle}!${colLetter(columns.Id)}${row}`,values:[[item.id]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Reward)}${row}`,values:[[item.reward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.AlternateReward)}${row}`,values:[[item.alternateReward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.XPAmount)}${row}`,values:[[item.xpAmount]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Cool)}${row}`,values:[[!!item.cool]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.ShowInPreview)}${row}`,values:[[!!item.showInPreview]]});
+  });
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+ipcMain.handle("google:apply-personal-event-linear",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,itemExp,boost,currencyToXP,rewards,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"Linear");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventLinearSpreadsheetId,["Common_PersonalLinear","Progress_Accumulative_PersonalLinear"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventLinearSpreadsheetId,names["Common_PersonalLinear"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeLinearProgressSheet(accessToken,personalEventLinearSpreadsheetId,names["Progress_Accumulative_PersonalLinear"],
+    {ItemExp:itemExp,Boost:boost,CurrencyToXP:currencyToXP},rewards);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"Linear",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+async function writeTasksSimpleSheet(accessToken,spreadsheetId,sheetTitle,taskRows){
+  const {rows,quotedTitle,api}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const sheetsMeta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheetId=(sheetsMeta.sheets||[]).find(s=>s.properties.title===sheetTitle)?.properties.sheetId;
+  if(sheetId===undefined)throw new Error(`Лист «${sheetTitle}» не найден`);
+
+  const headerIdx=rows.findIndex(row=>row.includes("Index")&&row.includes("TaskId")&&row.includes("NeededCount")&&row.includes("Rewards")&&row.includes("TaskPrice"));
+  if(headerIdx<0)throw new Error(`На листе «${sheetTitle}» не найдена таблица задач (Index/TaskId/NeededCount/Rewards/TaskPrice)`);
+  const header=rows[headerIdx];
+  const columns=Object.fromEntries(["Index","TaskId","NeededCount","Rewards","TaskPrice"].map(name=>[name,header.indexOf(name)]));
+
+  let existingCount=0;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row.every(cell=>cell===""||cell===undefined))break;
+    existingCount++;
+  }
+  const needed=taskRows.length;
+  const firstDataSheetRow=headerIdx+2;
+  if(existingCount>needed){
+    const startIndex=headerIdx+1+needed;
+    const endIndex=headerIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]})});
+  }else if(existingCount<needed){
+    const missing=needed-existingCount;
+    const startIndex=headerIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex:startIndex+missing},inheritFromBefore:existingCount>0}}]})});
+  }
+
+  const data=[];
+  taskRows.forEach((task,index)=>{
+    const row=firstDataSheetRow+index;
+    data.push({range:`${quotedTitle}!${colLetter(columns.Index)}${row}`,values:[[task.index??(index+1)]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.TaskId)}${row}`,values:[[task.taskId]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.NeededCount)}${row}`,values:[[task.neededCount]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Rewards)}${row}`,values:[[task.rewards]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.TaskPrice)}${row}`,values:[[task.taskPrice]]});
+  });
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+ipcMain.handle("google:get-task-reference",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${taskReferenceSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===taskReferenceGid);
+  if(!sheet)throw new Error("Лист со справочником задач не найден");
+  const {rows}=await readSheetValues(accessToken,taskReferenceSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("TaskId")&&row.includes("GDDescpiption"));
+  if(headerIdx<0)return [];
+  const header=rows[headerIdx];
+  const idCol=header.indexOf("TaskId"),descCol=header.indexOf("GDDescpiption");
+  const list=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row)continue;
+    const id=row[idCol];
+    if(id===undefined||id==="")continue;
+    list.push({taskId:id,description:String(row[descCol]||"")});
+  }
+  return list;
+});
+
+ipcMain.handle("google:apply-personal-event-tasks-horizontal",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,itemExp,boost,currencyToXP,rewards,tasks,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  if(!Array.isArray(tasks)||!tasks.length)throw new Error("Добавьте хотя бы одну задачу");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"TasksHorizontal");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventTasksHorizontalSpreadsheetId,["Common_PersonalTaskBookHorizontal","Progress_Accumulative_PersonalTaskBookHorizontal","Tasks_Simple_PersonalTaskBookHorizontal"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventTasksHorizontalSpreadsheetId,names["Common_PersonalTaskBookHorizontal"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeLinearProgressSheet(accessToken,personalEventTasksHorizontalSpreadsheetId,names["Progress_Accumulative_PersonalTaskBookHorizontal"],
+    {ItemExp:itemExp,Boost:boost,CurrencyToXP:currencyToXP},rewards);
+  await writeTasksSimpleSheet(accessToken,personalEventTasksHorizontalSpreadsheetId,names["Tasks_Simple_PersonalTaskBookHorizontal"],tasks);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"TasksHorizontal",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+ipcMain.handle("google:apply-personal-event-tasks-vertical",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,itemExp,rewards,tasks,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  if(!Array.isArray(tasks)||!tasks.length)throw new Error("Добавьте хотя бы одну задачу");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"TasksVertical");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventTasksVerticalSpreadsheetId,["Common_PersonalTaskBookVertical","Progress_Accumulative_PersonalTaskBookVertical","Tasks_Simple_PersonalTaskBookVertical"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventTasksVerticalSpreadsheetId,names["Common_PersonalTaskBookVertical"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeLinearProgressSheet(accessToken,personalEventTasksVerticalSpreadsheetId,names["Progress_Accumulative_PersonalTaskBookVertical"],
+    {ItemExp:itemExp},rewards);
+  const indexedTasks=tasks.map((task,index)=>({...task,index:Number(`${nextId}${String(index+1).padStart(2,"0")}`)}));
+  await writeTasksSimpleSheet(accessToken,personalEventTasksVerticalSpreadsheetId,names["Tasks_Simple_PersonalTaskBookVertical"],indexedTasks);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"TasksVertical",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+async function writeTopUpProgressSheet(accessToken,spreadsheetId,sheetTitle,metaFields,rewardRows){
+  const {rows,quotedTitle,api}=await readSheetValues(accessToken,spreadsheetId,sheetTitle);
+  const sheetsMeta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheetId=(sheetsMeta.sheets||[]).find(s=>s.properties.title===sheetTitle)?.properties.sheetId;
+  if(sheetId===undefined)throw new Error(`Лист «${sheetTitle}» не найден`);
+
+  const metaHeaderIdx=rows.findIndex(row=>row.includes("AdsPointName")&&row.includes("HowItWorkPlace"));
+  if(metaHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найден блок AdsPointName/.../HowItWorkPlace`);
+  const metaHeader=rows[metaHeaderIdx];
+  const metaDataRow=metaHeaderIdx+2;
+  const data=[];
+  for(const name of ["AdsPointName","CashBackFromUSD","CashBackFromGems","CashBackFromCoins","CashBackFromPixelPassCurrency","HowItWorkPlace"]){
+    if(metaFields[name]===undefined)continue;
+    const col=metaHeader.indexOf(name);
+    if(col<0)continue;
+    data.push({range:`${quotedTitle}!${colLetter(col)}${metaDataRow}`,values:[[metaFields[name]]]});
+  }
+
+  const rewardHeaderIdx=rows.findIndex((row,i)=>i>metaHeaderIdx&&row.includes("Id")&&row.includes("Reward")&&row.includes("AlternateReward")&&row.includes("Price"));
+  if(rewardHeaderIdx<0)throw new Error(`На листе «${sheetTitle}» не найдена таблица наград`);
+  const rewardHeader=rows[rewardHeaderIdx];
+  const columns=Object.fromEntries(["Id","Reward","AlternateReward","Price","Cool","ShowInPreview"].map(name=>[name,rewardHeader.indexOf(name)]));
+
+  let existingCount=0;
+  for(let i=rewardHeaderIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row.every(cell=>cell===""||cell===undefined))break;
+    existingCount++;
+  }
+  const needed=rewardRows.length;
+  const firstDataSheetRow=rewardHeaderIdx+2;
+  if(existingCount>needed){
+    const startIndex=rewardHeaderIdx+1+needed;
+    const endIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex}}}]})});
+  }else if(existingCount<needed){
+    const missing=needed-existingCount;
+    const startIndex=rewardHeaderIdx+1+existingCount;
+    await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{insertDimension:{range:{sheetId,dimension:"ROWS",startIndex,endIndex:startIndex+missing},inheritFromBefore:existingCount>0}}]})});
+  }
+
+  rewardRows.forEach((item,index)=>{
+    const row=firstDataSheetRow+index;
+    data.push({range:`${quotedTitle}!${colLetter(columns.Id)}${row}`,values:[[item.id]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Reward)}${row}`,values:[[item.reward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.AlternateReward)}${row}`,values:[[item.alternateReward]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Price)}${row}`,values:[[item.price]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.Cool)}${row}`,values:[[!!item.cool]]});
+    data.push({range:`${quotedTitle}!${colLetter(columns.ShowInPreview)}${row}`,values:[[!!item.showInPreview]]});
+  });
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+ipcMain.handle("google:apply-personal-event-topup",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,adsPointName,cashBackFromUSD,cashBackFromGems,cashBackFromCoins,cashBackFromPixelPassCurrency,howItWorkPlace,rewards,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"TopUp");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventTopUpSpreadsheetId,["Common_PersonalTopUp","Progress_Sequential_PersonalTopUp"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventTopUpSpreadsheetId,names["Common_PersonalTopUp"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeTopUpProgressSheet(accessToken,personalEventTopUpSpreadsheetId,names["Progress_Sequential_PersonalTopUp"],
+    {AdsPointName:adsPointName,CashBackFromUSD:cashBackFromUSD,CashBackFromGems:cashBackFromGems,CashBackFromCoins:cashBackFromCoins,CashBackFromPixelPassCurrency:cashBackFromPixelPassCurrency,HowItWorkPlace:howItWorkPlace},rewards);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"TopUp",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+ipcMain.handle("google:apply-personal-event-wheel",async(_event,partition)=>{
+  const {style,mechanicIds,infoStageDuration,activeStageDuration,addedStageDuration,timeUntilEndActiveStageForPopUp,mainPrefabName,notificationPrefabName,lobbyButtonPrefabName,infoPrefabName,infoPopupPreviewRewards,notificationBanners,openCellPrice,gemsOpenCellPrice,priceMultiplier1,spinType,rewards,startDate,endDate,endCompletionDate,expression,groupId,note,segment,target}=partition||{};
+  if(!Array.isArray(rewards)||!rewards.length)throw new Error("Добавьте хотя бы одну строку наград");
+  const accessToken=await getGoogleAccessToken();
+  const {nextId}=await getNextPersonalEventId(accessToken,"Wheel");
+  const names=await duplicatePersonalEventSheets(accessToken,personalEventWheelSpreadsheetId,["Common_PersonalWheelOfFortune","Progress_Wheel_PersonalWheelOfFortune"],nextId);
+  await writeBoardCommonSheet(accessToken,personalEventWheelSpreadsheetId,names["Common_PersonalWheelOfFortune"],{
+    EventId:nextId,Style:style,MechanicIds:mechanicIds,InfoStageDuration:infoStageDuration,ActiveStageDuration:activeStageDuration,
+    AddedStageDuration:addedStageDuration,TimeUntilEndActiveStageForPopUp:timeUntilEndActiveStageForPopUp,MainPrefabName:mainPrefabName,
+    NotificationPrefabName:notificationPrefabName,LobbyButtonPrefabName:lobbyButtonPrefabName,InfoPrefabName:infoPrefabName,
+    InfoPopupPreviewRewards:infoPopupPreviewRewards,...notificationBanners,
+  });
+  await writeBoardProgressSheet(accessToken,personalEventWheelSpreadsheetId,names["Progress_Wheel_PersonalWheelOfFortune"],
+    {OpenCellPrice:openCellPrice,GemsOpenCellPrice:gemsOpenCellPrice,PriceMultiplier1:priceMultiplier1,SpinType:spinType},rewards);
+  const isTest=target==="test";
+  await appendPersonalEventScheduleRow(accessToken,"Wheel",nextId,{startDate,endDate,expression,groupId,note,endCompletionDate});
+  await appendPersonalizedEventRow(accessToken,isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId,isTest?eventCenterTestPersonalizedEventGid:eventCenterPersonalizedEventGid,{
+    eventId:nextId,startDate,endDate,segment,groupId,style,
+  });
+  return {eventId:nextId,names};
+});
+
+ipcMain.handle("google:get-next-card-roulette-id",async(_event,isTest)=>{
+  const accessToken=await getGoogleAccessToken();
+  const spId=isTest?cardRouletteTestSpreadsheetId:cardRouletteSpreadsheetId;
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spId}`;
+  const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(spreadsheet.sheets||[]).find(entry=>entry.properties.sheetId===cardRouletteScheduleGid);
+  if(!sheet)throw new Error("Лист Schedule не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const colResp=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!B2:B100000`)}?majorDimension=COLUMNS&valueRenderOption=UNFORMATTED_VALUE`);
+  const col=(colResp.values&&colResp.values[0])||[];
+  let last=null;
+  for(const v of col){const n=Number(v);if(Number.isFinite(n))last=n}
+  return (last!==null?last:0)+1;
+});
+
+ipcMain.handle("google:apply-card-roulette-partition",async(_event,partition)=>{
+  const {name,id,style,segment,startDateTime,endDateTime,discount,openPrices,levelOpen,chests,target}=partition||{};
+  const cleanName=String(name||"").replace(/\s+/g,"");
+  if(!cleanName)throw new Error("Укажите Name");
+  if(!id)throw new Error("Укажите Id");
+  const isTest=target==="test";
+  const spId=isTest?cardRouletteTestSpreadsheetId:cardRouletteSpreadsheetId;
+  const eventCenterSpId=isTest?eventCenterTestSpreadsheetId:eventCenterSpreadsheetId;
+  const eventCenterGid=isTest?eventCenterTestCardRouletteGid:eventCenterCardRouletteGid;
+
+  const accessToken=await getGoogleAccessToken();
+  const names=await duplicateCardRouletteTemplateSheets(accessToken,spId,cleanName);
+  await appendCardRouletteScheduleRow(accessToken,spId,cardRouletteScheduleGid,{uniqueId:id,sheetName:names.chests});
+  await appendLotteryRow(accessToken,eventCenterSpId,eventCenterGid,{id,startDateTime:startDateTime||"",endDateTime:endDateTime||"",segment:segment||"",style:style||""});
+  if(Array.isArray(chests)&&chests.length){
+    const chestIds=chests.map(c=>Number(c.chestNumber));
+    await buildCardRouletteSettingsInSheet(accessToken,spId,names.settings,{
+      UniqueId:id,Style:style||"",FirstOpenDiscount:discount??"",OpenPrices:openPrices||"",
+      ChestIds:chestIds.join(","),AttributeIds:chestIds.map(chestAttributeId).join(","),LevelOpen:levelOpen??"",
+    });
+    await buildCardRouletteChestsInSheet(accessToken,spId,names.chests,chests);
+  }
+  return {names,spreadsheetUrl:`https://docs.google.com/spreadsheets/d/${spId}/edit`};
 });
 
 async function fetchWeaponAnalytics(accessToken){
@@ -526,11 +1407,7 @@ async function runWeaponAutoSync(){
     return Object.keys(patch).length?{...item,...patch}:item;
   });
 
-  const target=storePath("items");
-  const temporary=`${target}.${process.pid}.${Date.now()}.sync.tmp`;
-  await fs.promises.mkdir(path.dirname(target),{recursive:true});
-  await fs.promises.writeFile(temporary,JSON.stringify(allItems),"utf8");
-  await fs.promises.rename(temporary,target);
+  await queuedStoreWrite("items",allItems);
   console.log(`[sync] done: ${createdItems.length} new items, ${allItems.length} total`);
 }
 
@@ -622,14 +1499,78 @@ async function runCatalogXlsxSync(){
 
   if(!added&&!iconsFilled&&!removed&&!marked){console.log("[catalog-sync] no changes");return {added:0,iconsFilled:0,removed:0,total:result.length,debug}}
 
-  const target=storePath("items");
-  const temporary=`${target}.${process.pid}.${Date.now()}.catalog.tmp`;
-  await fs.promises.mkdir(path.dirname(target),{recursive:true});
-  await fs.promises.writeFile(temporary,JSON.stringify(result),"utf8");
-  await fs.promises.rename(temporary,target);
+  await queuedStoreWrite("items",result);
   console.log(`[catalog-sync] done: ${added} new items, ${iconsFilled} icons filled, ${removed} removed, ${result.length} total`);
   return {added,iconsFilled,removed,total:result.length,debug};
 }
+
+function parseItemsDataStorageWeaponKeys(text){
+  const map=new Map();
+  const chunks=text.split(/\n  - /);
+  for(const chunk of chunks){
+    const tagMatch=chunk.match(/_tag:\s*(\S+)/);
+    const keyMatch=chunk.match(/localizeWeaponKey:\s*(\S+)/);
+    if(tagMatch&&keyMatch)map.set(tagMatch[1].toLowerCase(),keyMatch[1]);
+  }
+  return map;
+}
+
+function parseLocalizationTerms(text,neededKeys){
+  const result=new Map();
+  const lines=text.split(/\r?\n/);
+  for(let i=0;i<lines.length;i++){
+    const m=lines[i].match(/^\s*-\s*term:\s*(\S+)\s*$/);
+    if(!m)continue;
+    const key=m[1];
+    if(neededKeys&&!neededKeys.has(key))continue;
+    const next=lines[i+1]||"";
+    const tm=next.match(/^\s*translation:\s*(.*)$/);
+    if(!tm)continue;
+    let value=tm[1];
+    if(value.startsWith("'")){
+      value=value.slice(1);
+      const endIdx=value.indexOf("'");
+      value=endIdx>=0?value.slice(0,endIdx):value;
+      value=value.replace(/''/g,"'");
+    }
+    value=value.trim();
+    if(value)result.set(key,value);
+  }
+  return result;
+}
+
+async function readWeaponRealNames(){
+  let storageText,langText;
+  try{storageText=await fs.promises.readFile(itemsDataStoragePath,"utf8")}
+  catch(error){console.log("[names-sync] ItemsDataStorage.asset not reachable, skipping",error.message);return null}
+  try{langText=await fs.promises.readFile(languageEnglishPath,"utf8")}
+  catch(error){console.log("[names-sync] Language_English.prefab not reachable, skipping",error.message);return null}
+  const tagToKey=parseItemsDataStorageWeaponKeys(storageText);
+  const neededKeys=new Set(tagToKey.values());
+  const keyToText=parseLocalizationTerms(langText,neededKeys);
+  const tagToName=new Map();
+  for(const [tag,key] of tagToKey){
+    const text=keyToText.get(key);
+    if(text)tagToName.set(tag,text);
+  }
+  return tagToName;
+}
+
+ipcMain.handle("catalog:sync-real-names",async()=>{
+  const tagToName=await readWeaponRealNames();
+  if(!tagToName)throw new Error("Не удалось прочитать файлы юнити-проекта (диск Z: подключён?)");
+  let existing=[];
+  try{existing=JSON.parse(await fs.promises.readFile(storePath("items"),"utf8"))||[]}catch(error){if(error.code!=="ENOENT")throw error}
+  let updated=0;
+  const result=existing.map(item=>{
+    if(!item.tag)return item;
+    const name=tagToName.get(String(item.tag).toLowerCase());
+    if(name&&item.realName!==name){updated++;return {...item,realName:name}}
+    return item;
+  });
+  if(updated)await queuedStoreWrite("items",result);
+  return {matched:tagToName.size,updated,total:existing.length};
+});
 
 ipcMain.handle("catalog:sync-from-xlsx",async()=>runCatalogXlsxSync());
 
@@ -651,18 +1592,29 @@ function storePath(key){
 ipcMain.handle("store:read",async(_event,key)=>{
   try{return JSON.parse(await fs.promises.readFile(storePath(key),"utf8"))}catch(error){if(error.code==="ENOENT")return null;throw error}
 });
-ipcMain.handle("store:write",async(_event,key,value)=>{
+async function queuedStoreWrite(key,value){
   const previous=storeWrites.get(key)||Promise.resolve();
   const pending=previous.catch(()=>{}).then(async()=>{
     const target=storePath(key);const temporary=`${target}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
     await fs.promises.mkdir(path.dirname(target),{recursive:true});
     await fs.promises.writeFile(temporary,JSON.stringify(value),"utf8");
-    await fs.promises.rename(temporary,target);
-    return true;
+    let lastError;
+    for(let attempt=0;attempt<5;attempt++){
+      try{
+        await fs.promises.rename(temporary,target);
+        return true;
+      }catch(error){
+        lastError=error;
+        if(error.code!=="EPERM"&&error.code!=="EBUSY")throw error;
+        await new Promise(resolve=>setTimeout(resolve,80*(attempt+1)));
+      }
+    }
+    throw lastError;
   });
   storeWrites.set(key,pending);
   return pending;
-});
+}
+ipcMain.handle("store:write",async(_event,key,value)=>queuedStoreWrite(key,value));
 
 function installPopupHandler(contents){
   contents.setWindowOpenHandler(({url})=>{
@@ -686,14 +1638,40 @@ app.on("web-contents-created",(_event,contents)=>installPopupHandler(contents));
 
 const mime = {".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json",".png":"image/png",".webp":"image/webp",".svg":"image/svg+xml",".ttf":"font/ttf"};
 
-function proxyJira(req,res){
+async function proxyJira(req,res){
+  const creds=await readJiraCredentials();
+  if(!creds){
+    res.writeHead(401,{"content-type":"application/json","access-control-allow-origin":"*"});
+    res.end(JSON.stringify({error:"jira_not_configured"}));
+    return;
+  }
+  const auth=Buffer.from(`${creds.email}:${creds.token}`).toString("base64");
   const targetPath=req.url.replace(/^\/jira-api/,"");
-  const upstream=https.request({hostname:"cubicgamesstudio.atlassian.net",path:targetPath,method:req.method,headers:{...req.headers,host:"cubicgamesstudio.atlassian.net",origin:"https://cubicgamesstudio.atlassian.net",referer:"https://cubicgamesstudio.atlassian.net/",authorization:`Basic ${jiraAuth}`}},up=>{
+  const upstream=https.request({hostname:jiraHost,path:targetPath,method:req.method,headers:{...req.headers,host:jiraHost,origin:`https://${jiraHost}`,referer:`https://${jiraHost}/`,authorization:`Basic ${auth}`}},up=>{
     res.writeHead(up.statusCode||500,{...up.headers,"access-control-allow-origin":"*"});up.pipe(res);
   });
   upstream.on("error",error=>{res.writeHead(502,{"content-type":"application/json"});res.end(JSON.stringify({error:error.message}));});
   req.pipe(upstream);
 }
+
+ipcMain.handle("jira:get-status",async()=>{
+  const creds=await readJiraCredentials();
+  return creds?{configured:true,email:creds.email}:{configured:false};
+});
+
+ipcMain.handle("jira:set-credentials",async(_event,email,token)=>{
+  const cleanEmail=String(email||"").trim();
+  const cleanToken=String(token||"").trim();
+  if(!cleanEmail||!cleanToken)throw new Error("Укажите email и API-токен");
+  const me=await verifyJiraCredentials(cleanEmail,cleanToken);
+  await writeJiraCredentials({email:cleanEmail,token:cleanToken});
+  return {configured:true,email:cleanEmail,displayName:me.displayName||cleanEmail};
+});
+
+ipcMain.handle("jira:clear-credentials",async()=>{
+  try{await fs.promises.unlink(jiraCredentialsPath())}catch(error){if(error.code!=="ENOENT")throw error}
+  return {configured:false};
+});
 
 const liveIconsItemsDir="C:\\Users\\Валерия\\Desktop\\pg3d-dashboard\\public\\icons-items";
 
