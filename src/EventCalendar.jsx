@@ -7,7 +7,7 @@ const iso=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0
 const parse=value=>new Date(`${value}T12:00:00`);
 const daysBetween=(a,b)=>Math.round((parse(b)-parse(a))/86400000);
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
-const ROW_HEIGHT=52;
+const ROW_HEIGHT=35;
 const TOP_PADDING=18;
 
 function LotteryConfigurator({event,onClose,onSave}){
@@ -432,50 +432,89 @@ const splitDateTime=iso=>{
 };
 
 function EventCenterSyncModal({events,onClose,onApply}){
-  const [groups,setGroups]=useState(null);
+  const [newGroups,setNewGroups]=useState(null);
+  const [statusChanges,setStatusChanges]=useState([]);
   const [error,setError]=useState("");
-  const [selected,setSelected]=useState(new Set());
+  const [selectedNew,setSelectedNew]=useState(new Set());
+  const [selectedStatus,setSelectedStatus]=useState(new Set());
 
   useEffect(()=>{
     window.workspaceGoogle?.syncEventCenter().then(list=>{
-      const known=new Set();
+      const knownIndex=new Map();
       for(const event of events){
         if(Array.isArray(event.sourceEventIds)){
-          for(const id of event.sourceEventIds)known.add(`${event.type}|${id}`);
+          for(const id of event.sourceEventIds)knownIndex.set(`${event.type}|${id}`,event);
         }
       }
-      const fresh=(list||[]).filter(group=>!group.eventIds.some(id=>known.has(`${group.type}|${id}`)));
+      const fresh=[];
+      const changesMap=new Map();
+      for(const group of (list||[])){
+        const matched=group.eventIds.map(id=>knownIndex.get(`${group.type}|${id}`)).find(Boolean);
+        if(!matched){fresh.push(group);continue}
+        const currentlyEnabled=matched.enabled!==false;
+        if(currentlyEnabled!==group.enabled&&!changesMap.has(matched.id)){
+          changesMap.set(matched.id,{eventId:matched.id,title:matched.title,type:matched.type,from:currentlyEnabled,to:group.enabled});
+        }
+      }
+      const changes=[...changesMap.values()];
       fresh.sort((a,b)=>a.start.localeCompare(b.start));
-      setGroups(fresh);
-      setSelected(new Set(fresh.map((_,index)=>index)));
+      setNewGroups(fresh);
+      setStatusChanges(changes);
+      setSelectedNew(new Set(fresh.map((_,index)=>index)));
+      setSelectedStatus(new Set(changes.map((_,index)=>index)));
     }).catch(e=>setError(e.message||"Ошибка чтения EventCenterConfig"));
   },[]);
 
-  const toggle=index=>setSelected(prev=>{
+  const toggleNew=index=>setSelectedNew(prev=>{
+    const next=new Set(prev);
+    if(next.has(index))next.delete(index);else next.add(index);
+    return next;
+  });
+  const toggleStatus=index=>setSelectedStatus(prev=>{
     const next=new Set(prev);
     if(next.has(index))next.delete(index);else next.add(index);
     return next;
   });
 
   const apply=()=>{
-    onApply(groups.filter((_,index)=>selected.has(index)));
+    onApply({
+      groupsToAdd:newGroups.filter((_,index)=>selectedNew.has(index)),
+      changesToApply:statusChanges.filter((_,index)=>selectedStatus.has(index)),
+    });
     onClose();
   };
+
+  const totalFound=(newGroups?.length||0)+statusChanges.length;
+  const totalSelected=selectedNew.size+selectedStatus.size;
 
   return (
     <div className="event-modal-backdrop" style={{position:"fixed",zIndex:70}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal" style={{width:"min(640px,100%)",maxHeight:"85vh",overflowY:"auto"}}>
         <header><div><span>СИНХРОНИЗАЦИЯ</span><h2>EventCenterConfig → График</h2></div><button onClick={onClose}><FiX/></button></header>
         {error && <div className="config-status error">{error}</div>}
-        {!error && groups===null && <div style={{padding:16,color:"#91a293",fontSize:12}}>Читаем EventCenterConfig...</div>}
-        {groups && groups.length===0 && <div style={{padding:16,color:"#91a293",fontSize:12}}>Новых событий не найдено (с начала года) — график уже актуален.</div>}
-        {groups && groups.length>0 && <>
-          <div style={{fontSize:12,color:"#91a293",marginBottom:10}}>Найдено {groups.length} новых событий с начала года. Отметьте, что добавить:</div>
-          {groups.map((group,index)=>(
-            <label key={index} className="sync-row" style={{display:"flex",gap:12,alignItems:"flex-start",padding:"10px 4px",borderTop:index>0?"1px solid #59645b":"none",fontSize:12,cursor:"pointer"}}>
-              <input type="checkbox" checked={selected.has(index)} onChange={()=>toggle(index)} style={{marginTop:2,width:20,height:20,flexShrink:0,accentColor:"#ff7348",borderRadius:0,cursor:"pointer"}}/>
+        {!error && newGroups===null && <div style={{padding:16,color:"#91a293",fontSize:12}}>Читаем EventCenterConfig...</div>}
+        {newGroups && totalFound===0 && <div style={{padding:16,color:"#91a293",fontSize:12}}>Отличий не найдено (с начала года) — график уже актуален.</div>}
+
+        {statusChanges.length>0 && <>
+          <div style={{fontSize:12,color:"#91a293",margin:"0 0 10px"}}>Изменился статус IsEnable у {statusChanges.length} уже добавленных событий:</div>
+          {statusChanges.map((change,index)=>(
+            <label key={change.eventId} className="sync-row" style={{display:"flex",gap:12,alignItems:"flex-start",padding:"10px 4px",borderTop:index>0?"1px solid #59645b":"none",fontSize:12,cursor:"pointer"}}>
+              <input type="checkbox" checked={selectedStatus.has(index)} onChange={()=>toggleStatus(index)} style={{marginTop:2,width:20,height:20,flexShrink:0,accentColor:"#ff7348",borderRadius:0,cursor:"pointer"}}/>
               <div>
-                <div><b style={{color:TYPES[group.type]}}>{group.type}</b> — {group.style||"(без названия)"}</div>
+                <div><b style={{color:TYPES[change.type]}}>{change.type}</b> — {change.title}</div>
+                <div style={{color:"#91a293"}}>{change.from?"включено":"выключено"} → {change.to?"включено":"выключено"}</div>
+              </div>
+            </label>
+          ))}
+        </>}
+
+        {newGroups && newGroups.length>0 && <>
+          <div style={{fontSize:12,color:"#91a293",margin:statusChanges.length?"16px 0 10px":"0 0 10px"}}>Найдено {newGroups.length} новых событий с начала года. Отметьте, что добавить:</div>
+          {newGroups.map((group,index)=>(
+            <label key={index} className="sync-row" style={{display:"flex",gap:12,alignItems:"flex-start",padding:"10px 4px",borderTop:index>0?"1px solid #59645b":"none",fontSize:12,cursor:"pointer"}}>
+              <input type="checkbox" checked={selectedNew.has(index)} onChange={()=>toggleNew(index)} style={{marginTop:2,width:20,height:20,flexShrink:0,accentColor:"#ff7348",borderRadius:0,cursor:"pointer"}}/>
+              <div>
+                <div><b style={{color:TYPES[group.type]}}>{group.type}</b> — {group.style||"(без названия)"}{group.enabled===false?" (выключено)":""}</div>
                 <div style={{color:"#91a293"}}>
                   {splitDateTime(group.start).date} → {splitDateTime(group.end).date}
                   {group.segments.length?` · сегменты: ${group.segments.join(", ")}`:""}
@@ -487,7 +526,7 @@ function EventCenterSyncModal({events,onClose,onApply}){
         </>}
         <footer>
           <button className="secondary-action" onClick={onClose}>Отменить</button>
-          {groups && groups.length>0 && <button className="primary-action" onClick={apply}>Обновить график ({selected.size})</button>}
+          {totalFound>0 && <button className="primary-action" onClick={apply}>Обновить график ({totalSelected})</button>}
         </footer>
       </div>
     </div>
@@ -504,6 +543,7 @@ export default function EventCalendar(){
   const [configState,setConfigState]=useState({status:"idle",message:""});
   const [showConfigurator,setShowConfigurator]=useState(false);
   const [showSync,setShowSync]=useState(false);
+  const [enableStatus,setEnableStatus]=useState({state:"idle",message:""});
   const days=useMemo(()=>Array.from({length:new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate()},(_,index)=>new Date(cursor.getFullYear(),cursor.getMonth(),index+1)),[cursor]);
   const monthStart=iso(days[0]),monthEnd=iso(days[days.length-1]);
   const visible=events.filter(event=>event.end>=monthStart&&event.start<=monthEnd);
@@ -515,7 +555,7 @@ export default function EventCalendar(){
       if(!groups.has(type))groups.set(type,[]);
       groups.get(type).push(event);
     }
-    const BAND_GAP=14,LABEL_HEIGHT=18;
+    const BAND_GAP=10,LABEL_HEIGHT=16;
     const positions=new Map();
     const bands=[];
     let offset=0;
@@ -542,6 +582,19 @@ export default function EventCalendar(){
 
   const createAt=day=>{const date=iso(day);const item={id:`event-${Date.now()}`,title:"Новый ивент",start:date,end:date,startTime:"10:00",endTime:"18:00",type:"Pixel Pass",notes:""};setEvents(current=>[...current,item]);setSelectedId(item.id)};
   const update=patch=>setEvents(current=>current.map(event=>event.id===selectedId?{...event,...patch}:event));
+  useEffect(()=>{setEnableStatus({state:"idle",message:""})},[selectedId]);
+  const toggleEnabled=async checked=>{
+    if(!selected)return;
+    update({enabled:checked});
+    if(!Array.isArray(selected.sourceEventIds)||!selected.sourceEventIds.length)return;
+    setEnableStatus({state:"loading",message:"Обновляем EventCenterConfig..."});
+    try{
+      await window.workspaceGoogle?.setEventEnabled({type:selected.type,eventIds:selected.sourceEventIds,enabled:checked});
+      setEnableStatus({state:"success",message:"Готово"});
+    }catch(error){
+      setEnableStatus({state:"error",message:error.message||"Ошибка"});
+    }
+  };
   const remove=()=>{if(!selected)return;setEvents(current=>current.filter(event=>event.id!==selectedId));setSelectedId(null)};
   const duplicate=()=>{if(!selected)return;const copy={...selected,id:`event-${Date.now()}`,title:`${selected.title} — копия`};setEvents(current=>[...current,copy]);setSelectedId(copy.id)};
   const createConfig=()=>{
@@ -553,9 +606,9 @@ export default function EventCalendar(){
   const changeMonth=delta=>setCursor(current=>new Date(current.getFullYear(),current.getMonth()+delta,1));
   const beginGesture=(event,item,mode)=>{event.stopPropagation();const width=event.currentTarget.closest(".calendar-timeline").getBoundingClientRect().width;setGesture({id:item.id,mode,x:event.clientX,y:event.clientY,width,start:item.start,end:item.end,deltaX:0})};
 
-  const applySync=groupsToAdd=>{
+  const applySync=({groupsToAdd,changesToApply})=>{
     setEvents(prev=>{
-      const next=[...prev];
+      let next=[...prev];
       for(const group of groupsToAdd){
         const {date:startDate,time:startTime}=splitDateTime(group.start);
         const {date:endDate,time:endTime}=splitDateTime(group.end);
@@ -568,10 +621,14 @@ export default function EventCalendar(){
           startTime,endTime,
           type:group.type,
           notes:group.segments.length?`Сегменты: ${group.segments.join(", ")}`:"",
+          enabled:group.enabled!==false,
           sourceEventIds:group.eventIds,
           sourceStyle:group.style,
           sourceSegments:group.segments,
         });
+      }
+      for(const change of (changesToApply||[])){
+        next=next.map(event=>event.id===change.eventId?{...event,enabled:change.to}:event);
       }
       return next;
     });
@@ -584,11 +641,11 @@ export default function EventCalendar(){
       <div className="calendar-timeline" style={{"--days":days.length,height:timelineHeight}} onDoubleClick={event=>{if(event.target===event.currentTarget){const rect=event.currentTarget.getBoundingClientRect();createAt(days[clamp(Math.floor((event.clientX-rect.left)/(rect.width/days.length)),0,days.length-1)])}}}>
         <div className="calendar-grid-lines" style={{gridTemplateColumns:`repeat(${days.length},1fr)`}}>{days.map(day=><i key={iso(day)} className={iso(day)===iso(today)?"today":""} onClick={()=>createAt(day)}/>)}</div>
         {layout.bands.map(band=><div key={band.type} className="calendar-band-label" style={{position:"absolute",left:4,top:TOP_PADDING+band.top,fontSize:9,letterSpacing:0.5,textTransform:"uppercase",color:TYPES[band.type]||"#91a293",opacity:0.8}}>{band.type==="__other__"?"Другое":band.type}</div>)}
-        {visible.map(item=>{const start=clamp(daysBetween(monthStart,item.start),0,days.length-1);const end=clamp(daysBetween(monthStart,item.end),0,days.length-1);const top=TOP_PADDING+(layout.positions.get(item.id)??0);return <div key={item.id} className="calendar-event" style={{left:`${start/days.length*100}%`,width:`${(end-start+1)/days.length*100}%`,top,background:TYPES[item.type]}} onPointerDown={event=>beginGesture(event,item,"move")} onDoubleClick={event=>{event.stopPropagation();setSelectedId(item.id)}}><i className="resize left" onPointerDown={event=>beginGesture(event,item,"left")}/><span>{item.title}</span><small>{item.type}</small><i className="resize right" onPointerDown={event=>beginGesture(event,item,"right")}/></div>})}
+        {visible.map(item=>{const start=clamp(daysBetween(monthStart,item.start),0,days.length-1);const end=clamp(daysBetween(monthStart,item.end),0,days.length-1);const top=TOP_PADDING+(layout.positions.get(item.id)??0);const accent=TYPES[item.type]||"#8fa091";const disabled=item.enabled===false;return <div key={item.id} className="calendar-event" style={{left:`${start/days.length*100}%`,width:`${(end-start+1)/days.length*100}%`,top,background:disabled?"var(--orion-bg)":accent,borderColor:disabled?accent:"#292929",color:disabled?accent:"#292929"}} onPointerDown={event=>beginGesture(event,item,"move")} onDoubleClick={event=>{event.stopPropagation();setSelectedId(item.id)}}><i className="resize left" onPointerDown={event=>beginGesture(event,item,"left")}/><span>{item.title}</span><small>{item.type}</small><i className="resize right" onPointerDown={event=>beginGesture(event,item,"right")}/></div>})}
         {!visible.length&&<button className="calendar-empty" onClick={()=>createAt(days[Math.floor(days.length/2)])}><FiPlus/>Добавить первый ивент</button>}
       </div>
     </div>
-    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header><label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>Настроить</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
+    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header><label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={selected.enabled!==false} onChange={event=>toggleEnabled(event.target.checked)} style={{width:18,height:18,accentColor:TYPES[selected.type]||"#ff7348",cursor:"pointer"}}/><span style={{textTransform:"none",letterSpacing:0,fontWeight:400,fontSize:11}}>Включено (IsEnable в EventCenterConfig){!selected.sourceEventIds?.length&&" — не привязано, статус только локальный"}</span></label>{enableStatus.message&&<div className={`config-status ${enableStatus.state==="error"?"error":enableStatus.state==="loading"?"loading":"success"}`}>{enableStatus.message}</div>}<label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>Настроить</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
     {showConfigurator&&selected&&selected.type==="Lottery"&&<LotteryConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({lotteryConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Card Roulette"&&<CardRouletteConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({cardRouletteConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Personal Event"&&<PersonalEventConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({personalEventConfig:cfg})}/>}

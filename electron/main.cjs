@@ -750,6 +750,7 @@ async function readEventCenterTab(accessToken,gid,typeLabel){
   const endCol=header.indexOf("EndDate")>=0?header.indexOf("EndDate"):header.indexOf("EndDistributionDate");
   const segCol=header.indexOf("Segment");
   const styleCol=header.indexOf("Style");
+  const enableCol=header.indexOf("IsEnable");
   const normalizeSheetDate=value=>{
     if(typeof value==="string"){
       const trimmed=value.trim();
@@ -778,6 +779,7 @@ async function readEventCenterTab(accessToken,gid,typeLabel){
       end:endNormalized,
       segment:segCol>=0?String(row[segCol]||""):"",
       style:styleCol>=0?String(row[styleCol]||""):"",
+      enabled:enableCol>=0?(row[enableCol]===true||String(row[enableCol]).trim().toUpperCase()==="TRUE"):true,
     });
   }
   return results;
@@ -806,12 +808,58 @@ ipcMain.handle("google:sync-event-center",async()=>{
   const groups=new Map();
   for(const row of filtered){
     const key=`${row.type}|${row.style}|${row.start}|${row.end}`;
-    if(!groups.has(key))groups.set(key,{type:row.type,style:row.style,start:row.start,end:row.end,eventIds:[],segments:[]});
+    if(!groups.has(key))groups.set(key,{type:row.type,style:row.style,start:row.start,end:row.end,eventIds:[],segments:[],enabledFlags:[]});
     const group=groups.get(key);
     group.eventIds.push(row.eventId);
     if(row.segment)group.segments.push(row.segment);
+    group.enabledFlags.push(row.enabled);
   }
-  return [...groups.values()];
+  return [...groups.values()].map(group=>({
+    type:group.type,style:group.style,start:group.start,end:group.end,
+    eventIds:group.eventIds,segments:group.segments,
+    enabled:group.enabledFlags.every(Boolean),
+  }));
+});
+
+async function setEventCenterEnabled(accessToken,gid,eventIds,enabled){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${eventCenterSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист не найден в EventCenterConfig");
+  const {rows,quotedTitle,api:sheetsApi}=await readSheetValues(accessToken,eventCenterSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("EventId")&&(row.includes("StartDate")||row.includes("StartDistributionDate")));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы");
+  const header=rows[headerIdx];
+  const idCol=header.indexOf("EventId");
+  const enableCol=header.indexOf("IsEnable");
+  if(enableCol<0)throw new Error("Не найдена колонка IsEnable");
+  const idSet=new Set(eventIds.map(String));
+  const data=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||row[idCol]===undefined)continue;
+    if(idSet.has(String(row[idCol])))data.push({range:`${quotedTitle}!${colLetter(enableCol)}${i+1}`,values:[[!!enabled]]});
+  }
+  if(!data.length)throw new Error("Не найдено ни одной строки с указанными id в EventCenterConfig");
+  await sheetsRequest(accessToken,`${sheetsApi}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+  return {updated:data.length};
+}
+
+ipcMain.handle("google:set-event-enabled",async(_event,payload)=>{
+  const {type,eventIds,enabled}=payload||{};
+  const gidMap={
+    Lottery:eventCenterLotteryGid,
+    "Card Roulette":eventCenterCardRouletteGid,
+    "Ads Roulette":eventCenterRouletteAdsGid,
+    "Template Event":eventCenterTemplateEventGid,
+    "Personal Event":eventCenterPersonalizedEventGid,
+    "Pixel Pass":eventCenterPixelPassGid,
+  };
+  const gid=gidMap[type];
+  if(gid===undefined)throw new Error(`Синхронизация статуса недоступна для типа «${type}»`);
+  if(!Array.isArray(eventIds)||!eventIds.length)throw new Error("У этого события нет привязки к EventCenterConfig");
+  const accessToken=await getGoogleAccessToken();
+  return setEventCenterEnabled(accessToken,gid,eventIds,!!enabled);
 });
 
 const BOARD_META_FIELDS=["EventId","Style","MechanicIds","InfoStageDuration","ActiveStageDuration","AddedStageDuration","TimeUntilEndActiveStageForPopUp","MainPrefabName","NotificationPrefabName","LobbyButtonPrefabName","InfoPrefabName","InfoPopupPreviewRewards"];

@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   getSegments: () => ipcRenderer.invoke("google:get-segments"),
   getSegmentExpressions: () => ipcRenderer.invoke("google:get-segment-expressions"),
   syncEventCenter: () => ipcRenderer.invoke("google:sync-event-center"),
+  setEventEnabled: (payload) => ipcRenderer.invoke("google:set-event-enabled", payload),
   getRewardPools: () => ipcRenderer.invoke("google:get-reward-pools"),
   applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
   getNextCardRouletteId: (isTest) => ipcRenderer.invoke("google:get-next-card-roulette-id", isTest),
