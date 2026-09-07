@@ -869,7 +869,7 @@ ipcMain.handle("google:set-event-enabled",async(_event,payload)=>{
 const GAME_OFFER_FIELDS=["Id","Label","Type","BindedOffers","PriceTier","PriceItem","AsAGift","AsAGiftHideNick","Country","StartTime","EndTime","Lifetime","Cooldown","CooldownOnBuy","GuiOrder","BuyLimit","GameOfferGroup","Priority","GameOfferGui","GameOfferGuiDouble","PopupOnStart","PopupPriority","LobbyPopupCooldown","ShowPreview","EnableMiniBanner","OrderMiniBanner","PlatformList","IsEnable","AnalyticGroup","Expression","$","ItemReward","ForDeepLink","ShowOnlyIfAvailableByExpression","IgnoreGlobalAndGroupCooldown","PlaceToShow"];
 const GAME_OFFER_GUI_FIELDS=["Id","Label","PrefabGuiWindow","ImageGuiWindowMain","GuiApplyer","ImagePattern","TextTitle","TextDescription","TextDescriptionLong","ColorLabel1","TextLabel1","ColorLabel2","TextLabel2","TextTimeLeft","TextPrice","TextOldPrice","PriceOldSale","TextButtonBuy","TextSale","SaleAmount","BankSection","PrefabGuiBank","LayoutTypeBank","ImageGuiBank","PrefabBannerLobby","ImageBannerLobby"];
 const GAME_OFFER_LIST_FIELDS=["Type","PriceTier","Country","GameOfferGroup","PlatformList","Expression"];
-const GAME_OFFER_GUI_LIST_FIELDS=["PrefabGuiWindow","ImageGuiWindowMain","GuiApplyer","ImagePattern","BankSection","LayoutTypeBank","PrefabBannerLobby","ImageBannerLobby"];
+const GAME_OFFER_GUI_LIST_FIELDS=["PrefabGuiWindow","ImageGuiWindowMain","GuiApplyer","ImagePattern","BankSection","PrefabGuiBank","LayoutTypeBank","ImageGuiBank","PrefabBannerLobby","ImageBannerLobby"];
 
 async function readGameOffersTab(accessToken,gid){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
