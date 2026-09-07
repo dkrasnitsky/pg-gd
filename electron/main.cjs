@@ -851,6 +851,11 @@ async function setEventCenterEnabled(accessToken,gid,eventIds,enabled){
 
 ipcMain.handle("google:set-event-enabled",async(_event,payload)=>{
   const {type,eventIds,enabled}=payload||{};
+  if(type==="Offers"){
+    if(!Array.isArray(eventIds)||!eventIds.length)throw new Error("У этой кампании нет привязанных офферов");
+    const accessToken=await getGoogleAccessToken();
+    return setOffersEnabled(accessToken,eventIds,!!enabled);
+  }
   const gidMap={
     Lottery:eventCenterLotteryGid,
     "Card Roulette":eventCenterCardRouletteGid,
@@ -864,6 +869,58 @@ ipcMain.handle("google:set-event-enabled",async(_event,payload)=>{
   if(!Array.isArray(eventIds)||!eventIds.length)throw new Error("У этого события нет привязки к EventCenterConfig");
   const accessToken=await getGoogleAccessToken();
   return setEventCenterEnabled(accessToken,gid,eventIds,!!enabled);
+});
+
+async function findGameOfferSheetInfo(accessToken){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gameOfferGid);
+  if(!sheet)throw new Error("Лист GameOffer не найден");
+  const {rows}=await readSheetValues(accessToken,gameOffersSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("Id")&&row.includes("Label"));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы GameOffer");
+  return {api,quotedTitle:`'${sheet.properties.title.replace(/'/g,"''")}'`,rows,header:rows[headerIdx],headerIdx};
+}
+
+async function setOffersEnabled(accessToken,offerIds,enabled){
+  const {api,quotedTitle,rows,header,headerIdx}=await findGameOfferSheetInfo(accessToken);
+  const idCol=header.indexOf("Id");
+  const enableCol=header.indexOf("IsEnable");
+  if(enableCol<0)throw new Error("Не найдена колонка IsEnable");
+  const idSet=new Set(offerIds.map(String));
+  const data=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(row&&idSet.has(String(row[idCol])))data.push({range:`${quotedTitle}!${colLetter(enableCol)}${i+1}`,values:[[!!enabled]]});
+  }
+  if(!data.length)throw new Error("Не найдено ни одного оффера с такими id");
+  await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+  return {updated:data.length};
+}
+
+async function setOffersDates(accessToken,offerIds,startTime,endTime){
+  const {api,quotedTitle,rows,header,headerIdx}=await findGameOfferSheetInfo(accessToken);
+  const idCol=header.indexOf("Id");
+  const startCol=header.indexOf("StartTime");
+  const endCol=header.indexOf("EndTime");
+  const idSet=new Set(offerIds.map(String));
+  const data=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(row&&idSet.has(String(row[idCol]))){
+      data.push({range:`${quotedTitle}!${colLetter(startCol)}${i+1}`,values:[[startTime]]});
+      data.push({range:`${quotedTitle}!${colLetter(endCol)}${i+1}`,values:[[endTime]]});
+    }
+  }
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+  return {updated:data.length/2};
+}
+
+ipcMain.handle("google:apply-offer-campaign",async(_event,payload)=>{
+  const {offerIdsToDate,startTime,endTime}=payload||{};
+  if(!Array.isArray(offerIdsToDate)||!offerIdsToDate.length)return {updated:0};
+  const accessToken=await getGoogleAccessToken();
+  return setOffersDates(accessToken,offerIdsToDate,startTime,endTime);
 });
 
 const GAME_OFFER_FIELDS=["Id","Label","Type","BindedOffers","PriceTier","PriceItem","AsAGift","AsAGiftHideNick","Country","StartTime","EndTime","Lifetime","Cooldown","CooldownOnBuy","GuiOrder","BuyLimit","GameOfferGroup","Priority","GameOfferGui","GameOfferGuiDouble","PopupOnStart","PopupPriority","LobbyPopupCooldown","ShowPreview","EnableMiniBanner","OrderMiniBanner","PlatformList","IsEnable","AnalyticGroup","Expression","$","ItemReward","ForDeepLink","ShowOnlyIfAvailableByExpression","IgnoreGlobalAndGroupCooldown","PlaceToShow"];

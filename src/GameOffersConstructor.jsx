@@ -231,7 +231,7 @@ function OfferEditor({initial,priceTiers,listOptions,onBack,onSaved,onOpenCampai
   );
 }
 
-export default function GameOffersConstructor(){
+export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
   const [offers,setOffers]=useState([]);
   const [priceTiers,setPriceTiers]=useState({});
   const [listOptions,setListOptions]=useState({});
@@ -247,9 +247,21 @@ export default function GameOffersConstructor(){
         setOffers(cache.offers);
         setPriceTiers(cache.priceTiers||{});
         setListOptions(cache.listOptions||{});
+        if(pendingOfferId?.id){
+          const found=cache.offers.find(item=>item.Id===pendingOfferId.id);
+          if(found)setEditingOffer(found);
+        }
       }
     }).catch(()=>{});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  useEffect(()=>{
+    if(!pendingOfferId?.id)return;
+    const found=offers.find(item=>item.Id===pendingOfferId.id);
+    if(found)setEditingOffer(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[pendingOfferId?.nonce]);
 
   const persistCache=(nextOffers,nextPriceTiers,nextListOptions)=>{
     window.workspaceStore?.write("gameOffersCache",{offers:nextOffers,priceTiers:nextPriceTiers,listOptions:nextListOptions}).catch(()=>{});
@@ -311,7 +323,7 @@ export default function GameOffersConstructor(){
   if(editingOffer){
     return <OfferEditor initial={editingOffer} priceTiers={priceTiers} listOptions={listOptions}
       onBack={()=>setEditingOffer(null)} onSaved={onSaved} copiedOffer={copiedOffer} onPaste={()=>setCopiedOffer(null)}
-      onOpenCampaign={()=>alert("Создание кампании в графике ивентов — следующий шаг, пока не готово")}/>;
+      onOpenCampaign={(offer)=>onOpenCampaign?.(offer.Id)}/>;
   }
 
   return (

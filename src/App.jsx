@@ -968,7 +968,7 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
   </>;
 }
 
-function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery,onOpenCardRoulette,onOpenItemSettings}){
+function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList=[],onOpenLottery,onOpenCardRoulette,onOpenItemSettings,pendingOfferId,onOpenOfferCampaign}){
   const [activeTool,setActiveTool]=useState(initialTool);
   useEffect(()=>setActiveTool(initialTool),[initialTool]);
   return (
@@ -985,7 +985,7 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"0 24px 24px"}}>
           <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery} onOpenCardRoulette={onOpenCardRoulette} onOpenItemSettings={onOpenItemSettings}/></div>
-          <div style={{display:activeTool==="offers"?"flex":"none",flexDirection:"column",height:"100%",paddingTop:18,boxSizing:"border-box"}}><GameOffersConstructor/></div>
+          <div style={{display:activeTool==="offers"?"flex":"none",flexDirection:"column",height:"100%",paddingTop:18,boxSizing:"border-box"}}><GameOffersConstructor pendingOfferId={pendingOfferId} onOpenCampaign={onOpenOfferCampaign}/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none",paddingTop:18}}><LootboxSimulator/></div>
           <div style={{display:activeTool==="lottery"?"block":"none",paddingTop:18}}><LotterySimulator/></div>
           <div style={{display:activeTool==="cardroulette"?"block":"none",paddingTop:18}}><CardRouletteSimulator/></div>
@@ -1308,6 +1308,16 @@ function AppShell(){
   const openCardRoulette=()=>{
     openPage("cardroulette");
   };
+  const [pendingOfferId,setPendingOfferId]=useState(null);
+  const openOffer=(offerId)=>{
+    setPendingOfferId({id:offerId,nonce:Date.now()});
+    openPage("offers");
+  };
+  const [pendingCampaignOffer,setPendingCampaignOffer]=useState(null);
+  const openOfferCampaign=(offerId)=>{
+    setPendingCampaignOffer({offerId,nonce:Date.now()});
+    openPage("events");
+  };
   const openSettingsTab=()=>{
     const id="page-settings";
     setTabs(prev=>prev.some(t=>t.id===id)?prev:[...prev,{id,type:"settings",title:"Настройки",tabIcon:"⚙"}]);
@@ -1342,9 +1352,9 @@ function AppShell(){
     if(tab.type==="settings")return <SettingsPanel navigation={navigation} onChange={setNavigation} onClose={()=>closeTab(tab.id)} items={items} onItemsChange={setItems} settingsList={settingsList} onSettingsListChange={setSettingsList} focusRequest={settingsRequest}/>;
     if(tab.type==="web")return <webview className="workspace-frame" src={tab.url} partition="persist:pg3d-workspace" allowpopups="true"/>;
     if(tab.page==="tasks")return <div className="task-shell"><TasksTab openIn={openIn} activeSection={0}/></div>;
-    if(tab.page==="events")return <EventCalendar/>;
+    if(tab.page==="events")return <EventCalendar onOpenOffer={openOffer} pendingCampaignOffer={pendingCampaignOffer}/>;
     if(tab.page==="notes")return <NotesPage/>;
-    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery} onOpenCardRoulette={openCardRoulette} onOpenItemSettings={openItemSettings}/>;
+    return <ToolsTab initialTool={tab.page} hideSelector items={items} settingsList={settingsList} onOpenLottery={openLottery} onOpenCardRoulette={openCardRoulette} onOpenItemSettings={openItemSettings} pendingOfferId={pendingOfferId} onOpenOfferCampaign={openOfferCampaign}/>;
   };
 
   if(onboarding&&(!onboarding.google||(!onboarding.jira&&!jiraSkipped))){

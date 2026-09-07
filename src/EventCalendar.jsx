@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiChevronRight, FiCopy, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 
-const TYPES={"Pixel Pass":"#ff7348",Lottery:"#c3d8c5","Card Roulette":"#8f83e8","Ads Roulette":"#d97757","Template Event":"#e8b26b","Personal Event":"#62a7e8","Core Event":"#e77c91"};
-const TYPE_ORDER=["Pixel Pass","Template Event","Lottery","Card Roulette","Personal Event","Ads Roulette","Core Event"];
+const TYPES={"Pixel Pass":"#ff7348",Lottery:"#c3d8c5","Card Roulette":"#8f83e8","Ads Roulette":"#d97757","Template Event":"#e8b26b","Personal Event":"#62a7e8","Core Event":"#e77c91",Offers:"#6bbf8f"};
+const TYPE_ORDER=["Pixel Pass","Template Event","Lottery","Card Roulette","Personal Event","Ads Roulette","Core Event","Offers"];
 const iso=date=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 const parse=value=>new Date(`${value}T12:00:00`);
 const daysBetween=(a,b)=>Math.round((parse(b)-parse(a))/86400000);
@@ -533,7 +533,120 @@ function EventCenterSyncModal({events,onClose,onApply}){
   );
 }
 
-export default function EventCalendar(){
+function offerLabel(offer){return offer.Label||offer.gui?.TextTitle||`Оффер ${offer.Id}`}
+
+function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
+  const [name,setName]=useState(event.title&&event.title!=="Кампания офферов"?event.title:(event.title||"Кампания офферов"));
+  const [startDate,setStartDate]=useState(event.offerCampaignConfig?.startDate||`${event.start}T${event.startTime||"09:00"}`);
+  const [endDate,setEndDate]=useState(event.offerCampaignConfig?.endDate||`${event.end}T${event.endTime||"09:00"}`);
+  const [allOffers,setAllOffers]=useState([]);
+  const [addedIds,setAddedIds]=useState(event.offerCampaignConfig?.offerIds||event.sourceEventIds||[]);
+  const [search,setSearch]=useState("");
+  const [showPicker,setShowPicker]=useState(false);
+  const [conflicts,setConflicts]=useState(null);
+  const [status,setStatus]=useState({state:"idle",message:""});
+
+  useEffect(()=>{
+    window.workspaceStore?.read("gameOffersCache").then(cache=>{
+      if(cache&&Array.isArray(cache.offers))setAllOffers(cache.offers);
+    }).catch(()=>{});
+  },[]);
+
+  const addedOffers=addedIds.map(id=>allOffers.find(o=>o.Id===id)).filter(Boolean);
+  const pickable=allOffers.filter(o=>!addedIds.includes(o.Id)&&(!search.trim()||offerLabel(o).toLowerCase().includes(search.toLowerCase())));
+
+  const removeOffer=id=>setAddedIds(prev=>prev.filter(x=>x!==id));
+  const addOffer=id=>{setAddedIds(prev=>[...prev,id]);setShowPicker(false);setSearch("")};
+
+  const doApply=async overrideIds=>{
+    setStatus({state:"loading",message:"Применяем..."});
+    try{
+      const startTime=`${startDate}:00`,endTime=`${endDate}:00`;
+      const toDate=[...addedOffers.filter(o=>!o.StartTime&&!o.EndTime).map(o=>o.Id),...overrideIds];
+      if(toDate.length)await window.workspaceGoogle?.applyOfferCampaign({offerIdsToDate:toDate,startTime,endTime});
+      onSave({title:name||"Кампания офферов",start:startDate,end:endDate,type:"Offers",sourceEventIds:addedIds,offerCampaignConfig:{startDate,endDate,offerIds:addedIds}});
+      onClose();
+    }catch(error){
+      setStatus({state:"error",message:error.message||"Ошибка"});
+    }
+  };
+
+  const createConfigClick=()=>{
+    if(!name.trim()){setStatus({state:"error",message:"Введите название кампании"});return}
+    if(!addedIds.length){setStatus({state:"error",message:"Добавьте хотя бы один оффер"});return}
+    const withDates=addedOffers.filter(o=>o.StartTime||o.EndTime);
+    if(withDates.length){setConflicts(withDates.map(o=>({id:o.Id,label:offerLabel(o),checked:false})));return}
+    doApply([]);
+  };
+
+  const toggleConflict=id=>setConflicts(prev=>prev.map(c=>c.id===id?{...c,checked:!c.checked}:c));
+  const confirmConflicts=()=>{
+    const overrideIds=conflicts.filter(c=>c.checked).map(c=>c.id);
+    setConflicts(null);
+    doApply(overrideIds);
+  };
+
+  return (
+    <div className="event-modal-backdrop" style={{position:"fixed",zIndex:70}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="event-modal" style={{width:"min(640px,100%)",maxHeight:"85vh",overflowY:"auto"}}>
+        <header><div><span>OFFERS CAMPAIGN</span><h2>Кампания офферов</h2></div><button onClick={onClose}><FiX/></button></header>
+
+        <label>Название кампании (ни на что не влияет, только для графика)<input value={name} onChange={e=>setName(e.target.value)}/></label>
+        <div className="form-columns">
+          <label>Даты старта<input type="datetime-local" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
+          <label>Даты окончания<input type="datetime-local" value={endDate} onChange={e=>setEndDate(e.target.value)}/></label>
+        </div>
+
+        <div style={{fontSize:11,color:"#91a293",textTransform:"uppercase",letterSpacing:0.5,margin:"14px 0 6px"}}>Офферы</div>
+        {addedOffers.map(offer=>(
+          <div key={offer.Id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",border:"1px solid #59645b",marginBottom:6,fontSize:12}}>
+            <span>{offerLabel(offer)}{(offer.StartTime||offer.EndTime)&&<small style={{color:"#ff5d55",marginLeft:8}}>уже есть даты</small>}</span>
+            <div style={{display:"flex",gap:8}}>
+              <button type="button" className="secondary-action" onClick={()=>onOpenOffer?.(offer.Id)}>В конструктор</button>
+              <button type="button" onClick={()=>removeOffer(offer.Id)} style={{background:"transparent",border:"none",color:"#ff5d55",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+            </div>
+          </div>
+        ))}
+        {addedIds.length>0 && addedOffers.length<addedIds.length && <div style={{fontSize:11,color:"#91a293",marginBottom:6}}>Часть офферов не найдена в локальном кэше — откройте Offer Constructor и нажмите «Синхронизация».</div>}
+
+        {!showPicker && <button type="button" onClick={()=>setShowPicker(true)} style={{width:36,height:36,background:"#ff7348",border:"none",color:"#000",fontWeight:800,fontSize:16,cursor:"pointer"}}>+</button>}
+        {showPicker && (
+          <div style={{border:"1px solid #59645b",padding:10,marginBottom:10}}>
+            <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск оффера по названию..." style={{width:"100%",background:"#1a1a22",border:"1px solid #59645b",color:"#c3d8c5",fontSize:12,padding:"6px 8px",boxSizing:"border-box",marginBottom:8}}/>
+            <div style={{maxHeight:180,overflowY:"auto"}}>
+              {pickable.length===0 && <div style={{fontSize:11,color:"#91a293",padding:6}}>{allOffers.length===0?"Кэш офферов пуст — сначала синхронизируйтесь в Offer Constructor.":"Ничего не найдено"}</div>}
+              {pickable.slice(0,50).map(o=>(
+                <div key={o.Id} onClick={()=>addOffer(o.Id)} style={{padding:"6px 8px",fontSize:12,cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#343934"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{offerLabel(o)}</div>
+              ))}
+            </div>
+            <button type="button" className="secondary-action" onClick={()=>{setShowPicker(false);setSearch("")}} style={{marginTop:8}}>Закрыть</button>
+          </div>
+        )}
+
+        {conflicts && (
+          <div style={{border:"1px solid #ff5d55",padding:12,marginTop:10,marginBottom:10}}>
+            <div style={{fontSize:12,marginBottom:8}}>У этих офферов уже есть свои даты. Отметьте, кому всё равно перезаписать датами кампании (остальные останутся со своими датами):</div>
+            {conflicts.map(c=>(
+              <label key={c.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,padding:"4px 0",cursor:"pointer"}}>
+                <input type="checkbox" checked={c.checked} onChange={()=>toggleConflict(c.id)} style={{width:18,height:18,accentColor:"#ff7348"}}/>{c.label}
+              </label>
+            ))}
+            <button type="button" className="primary-action" onClick={confirmConflicts} style={{marginTop:8}}>Продолжить</button>
+          </div>
+        )}
+
+        {status.message && <div className={`config-status ${status.state}`}>{status.message}</div>}
+        <footer>
+          <button className="secondary-action" onClick={onClose}>Отменить</button>
+          {!conflicts && <button className="primary-action" disabled={status.state==="loading"} onClick={createConfigClick}>Создать конфиг</button>}
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
   const today=new Date();
   const [cursor,setCursor]=useState(new Date(today.getFullYear(),today.getMonth(),1));
   const [events,setEvents]=useState([]);
@@ -577,6 +690,18 @@ export default function EventCalendar(){
   const selected=events.find(event=>event.id===selectedId);
 
   useEffect(()=>{let live=true;(async()=>{const saved=await window.workspaceStore?.read("calendar");if(live&&Array.isArray(saved))setEvents(saved.map((event,index)=>({...event,lane:Number.isInteger(event.lane)?event.lane:index})));if(live)setReady(true)})().catch(()=>setReady(true));return()=>{live=false}},[]);
+
+  useEffect(()=>{
+    if(!ready||!pendingCampaignOffer?.offerId)return;
+    const todayIso=iso(today);
+    const newEvent={id:`event-${Date.now()}`,title:"Кампания офферов",start:todayIso,end:todayIso,startTime:"10:00",endTime:"18:00",type:"Offers",notes:"",offerCampaignConfig:{offerIds:[pendingCampaignOffer.offerId]}};
+    setEvents(prev=>[...prev,newEvent]);
+    setSelectedId(newEvent.id);
+    setConfigState({status:"idle",message:""});
+    setShowConfigurator(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[ready,pendingCampaignOffer?.nonce]);
+
   useEffect(()=>{if(ready)window.workspaceStore?.write("calendar",events).catch(console.error)},[events,ready]);
   useEffect(()=>{if(!gesture)return;const move=event=>{const deltaX=Math.round((event.clientX-gesture.x)/(gesture.width/days.length));if(deltaX===gesture.deltaX)return;setGesture(current=>({...current,deltaX}));setEvents(current=>current.map(item=>{if(item.id!==gesture.id)return item;const start=parse(gesture.start),end=parse(gesture.end);if(gesture.mode==="move"){start.setDate(start.getDate()+deltaX);end.setDate(end.getDate()+deltaX)}else if(gesture.mode==="left")start.setDate(start.getDate()+clamp(deltaX,-365,daysBetween(gesture.start,gesture.end)));else end.setDate(end.getDate()+Math.max(deltaX,-daysBetween(gesture.start,gesture.end)));return{...item,start:iso(start),end:iso(end)}}))};const up=()=>setGesture(null);window.addEventListener("pointermove",move);window.addEventListener("pointerup",up,{once:true});return()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up)}},[gesture,days.length]);
 
@@ -599,7 +724,7 @@ export default function EventCalendar(){
   const duplicate=()=>{if(!selected)return;const copy={...selected,id:`event-${Date.now()}`,title:`${selected.title} — копия`};setEvents(current=>[...current,copy]);setSelectedId(copy.id)};
   const createConfig=()=>{
     if(!selected)return;
-    if(selected.type!=="Lottery"&&selected.type!=="Card Roulette"&&selected.type!=="Personal Event"){setConfigState({status:"error",message:"Настройка пока доступна только для типов Lottery, Card Roulette и Personal Event"});return}
+    if(selected.type!=="Lottery"&&selected.type!=="Card Roulette"&&selected.type!=="Personal Event"&&selected.type!=="Offers"){setConfigState({status:"error",message:"Настройка пока доступна только для типов Lottery, Card Roulette, Personal Event и Offers"});return}
     setConfigState({status:"idle",message:""});
     setShowConfigurator(true);
   };
@@ -649,6 +774,7 @@ export default function EventCalendar(){
     {showConfigurator&&selected&&selected.type==="Lottery"&&<LotteryConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({lotteryConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Card Roulette"&&<CardRouletteConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({cardRouletteConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Personal Event"&&<PersonalEventConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({personalEventConfig:cfg})}/>}
+    {showConfigurator&&selected&&selected.type==="Offers"&&<OfferCampaignConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update(cfg)} onOpenOffer={onOpenOffer}/>}
     {showSync&&<EventCenterSyncModal events={events} onClose={()=>setShowSync(false)} onApply={applySync}/>}
   </div>;
 }
