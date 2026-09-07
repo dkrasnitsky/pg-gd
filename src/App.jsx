@@ -4,6 +4,7 @@ import TimeTracker from "./TimeTracker";
 import LotterySimulator from "./LotterySimulator";
 import CardRouletteSimulator from "./CardRouletteSimulator";
 import PersonalEventSimulator from "./PersonalEventSimulator";
+import GameOffersConstructor from "./GameOffersConstructor";
 import NotesPage from "./NotesPage";
 import EventCalendar from "./EventCalendar";
 import { VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore } from "react-icons/vsc";
@@ -984,7 +985,7 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
       <div style={{flex:1,position:"relative"}}>
         <div style={{position:"absolute",inset:0,overflowY:"auto",padding:"0 24px 24px"}}>
           <div style={{display:activeTool==="content"?"block":"none"}}><ContentPicker items={items} settingsList={settingsList} onOpenLottery={onOpenLottery} onOpenCardRoulette={onOpenCardRoulette} onOpenItemSettings={onOpenItemSettings}/></div>
-          <div style={{display:activeTool==="offers"?"block":"none",paddingTop:18}}><OfferConstructor/></div>
+          <div style={{display:activeTool==="offers"?"flex":"none",flexDirection:"column",height:"100%",paddingTop:18,boxSizing:"border-box"}}><GameOffersConstructor onEdit={(offer)=>console.log("editor coming next phase",offer)}/></div>
           <div style={{display:activeTool==="lootbox"?"block":"none",paddingTop:18}}><LootboxSimulator/></div>
           <div style={{display:activeTool==="lottery"?"block":"none",paddingTop:18}}><LotterySimulator/></div>
           <div style={{display:activeTool==="cardroulette"?"block":"none",paddingTop:18}}><CardRouletteSimulator/></div>

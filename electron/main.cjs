@@ -14,7 +14,7 @@ const cardRouletteTestSpreadsheetId="1lIRQ8FT0vWZcsgHwl1clhZrNuY2RxCGV7faf_0hl5J
 const cardRouletteScheduleGid=1041170058;
 const eventCenterCardRouletteGid=641877320;
 const eventCenterTestCardRouletteGid=387562133;
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances","gameOffersCache"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const lotteryTestSpreadsheetId="10s8UQTOfFupR3afkyU0nmvKo_crLPjREHFTolesQK54";
@@ -28,6 +28,10 @@ const segmentsSheetGid=1297452825;
 const eventCenterRouletteAdsGid=1035905528;
 const eventCenterTemplateEventGid=1195098988;
 const eventCenterPixelPassGid=1170504714;
+const gameOffersSpreadsheetId="1vlDGjRJqApHyicMYLd9PtFhL9C5FCl0jhD0N4D2zyWs";
+const gameOfferGid=1298282127;
+const gameOfferGuiGid=1741583800;
+const priceTierGid=739652503;
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
@@ -860,6 +864,161 @@ ipcMain.handle("google:set-event-enabled",async(_event,payload)=>{
   if(!Array.isArray(eventIds)||!eventIds.length)throw new Error("У этого события нет привязки к EventCenterConfig");
   const accessToken=await getGoogleAccessToken();
   return setEventCenterEnabled(accessToken,gid,eventIds,!!enabled);
+});
+
+const GAME_OFFER_FIELDS=["Id","Label","Type","BindedOffers","PriceTier","PriceItem","AsAGift","AsAGiftHideNick","Country","StartTime","EndTime","Lifetime","Cooldown","CooldownOnBuy","GuiOrder","BuyLimit","GameOfferGroup","Priority","GameOfferGui","GameOfferGuiDouble","PopupOnStart","PopupPriority","LobbyPopupCooldown","ShowPreview","EnableMiniBanner","OrderMiniBanner","PlatformList","IsEnable","AnalyticGroup","Expression","$","ItemReward","ForDeepLink","ShowOnlyIfAvailableByExpression","IgnoreGlobalAndGroupCooldown","PlaceToShow"];
+const GAME_OFFER_GUI_FIELDS=["Id","Label","PrefabGuiWindow","ImageGuiWindowMain","GuiApplyer","ImagePattern","TextTitle","TextDescription","TextDescriptionLong","ColorLabel1","TextLabel1","ColorLabel2","TextLabel2","TextTimeLeft","TextPrice","TextOldPrice","PriceOldSale","TextButtonBuy","TextSale","SaleAmount","BankSection","PrefabGuiBank","LayoutTypeBank","ImageGuiBank","PrefabBannerLobby","ImageBannerLobby"];
+const GAME_OFFER_LIST_FIELDS=["Type","PriceTier","Country","GameOfferGroup","PlatformList","Expression"];
+const GAME_OFFER_GUI_LIST_FIELDS=["PrefabGuiWindow","ImageGuiWindowMain","GuiApplyer","ImagePattern","BankSection","LayoutTypeBank","PrefabBannerLobby","ImageBannerLobby"];
+
+async function readGameOffersTab(accessToken,gid){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист не найден в GameOffersSystem");
+  const {rows}=await readSheetValues(accessToken,gameOffersSpreadsheetId,sheet.properties.title);
+  return {title:sheet.properties.title,rows};
+}
+
+function rowsToObjects(rows,headerMatch,fields){
+  const headerIdx=rows.findIndex(row=>headerMatch.every(name=>row.includes(name)));
+  if(headerIdx<0)return {objects:[],headerIdx:-1,columns:{}};
+  const header=rows[headerIdx];
+  const columns=Object.fromEntries(fields.map(name=>[name,header.indexOf(name)]));
+  const idCol=columns.Id;
+  const objects=[];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row||idCol<0||row[idCol]===undefined||row[idCol]==="")continue;
+    const obj={};
+    for(const name of fields)obj[name]=columns[name]>=0?(row[columns[name]]??""):"";
+    objects.push(obj);
+  }
+  return {objects,headerIdx,columns};
+}
+
+function uniqueValues(objects,field){
+  return [...new Set(objects.map(o=>String(o[field]||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+}
+
+async function readPriceTiers(accessToken){
+  const {rows}=await readGameOffersTab(accessToken,priceTierGid);
+  const map={};
+  for(const row of rows){
+    if(!row||!row[0])continue;
+    const key=String(row[0]).trim();
+    if(/^PriceTier/i.test(key))map[key]=String(row[1]||"").trim();
+  }
+  return map;
+}
+
+ipcMain.handle("google:sync-offers",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const [offerTab,guiTab,priceTiers]=await Promise.all([
+    readGameOffersTab(accessToken,gameOfferGid),
+    readGameOffersTab(accessToken,gameOfferGuiGid),
+    readPriceTiers(accessToken),
+  ]);
+  const {objects:offerRows}=rowsToObjects(offerTab.rows,["Id","Label","Type"],GAME_OFFER_FIELDS);
+  const {objects:guiRows}=rowsToObjects(guiTab.rows,["Id","Label","PrefabGuiWindow"],GAME_OFFER_GUI_FIELDS);
+  const guiById=new Map(guiRows.map(gui=>[String(gui.Id),gui]));
+  const offers=offerRows.map(offer=>({
+    ...offer,
+    gui:guiById.get(String(offer.GameOfferGui))||null,
+    guiDouble:offer.Type==="Double"?(guiById.get(String(offer.GameOfferGuiDouble))||null):null,
+  }));
+  const listOptions={};
+  for(const field of GAME_OFFER_LIST_FIELDS)listOptions[field]=uniqueValues(offerRows,field);
+  for(const field of GAME_OFFER_GUI_LIST_FIELDS)listOptions[field]=uniqueValues(guiRows,field);
+  return {offers,priceTiers,listOptions};
+});
+
+async function upsertGameOffersRow(accessToken,gid,fields,idValue,values,idSuffix){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист не найден в GameOffersSystem");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const {rows}=await readSheetValues(accessToken,gameOffersSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("Id")&&row.includes("Label"));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы");
+  const header=rows[headerIdx];
+  const idCol=header.indexOf("Id");
+  let targetRow=-1;
+  if(idValue){
+    for(let i=headerIdx+1;i<rows.length;i++){
+      if(rows[i]&&String(rows[i][idCol])===String(idValue)){targetRow=i;break}
+    }
+  }
+  if(targetRow<0){
+    let maxPrefix=0;
+    const suffixPattern=new RegExp(`^(\\d+)${idSuffix}$`);
+    for(let i=headerIdx+1;i<rows.length;i++){
+      const row=rows[i];
+      if(!row||row[idCol]===undefined)continue;
+      const match=String(row[idCol]).match(suffixPattern);
+      if(match){const prefix=Number(match[1]);if(prefix>maxPrefix)maxPrefix=prefix}
+    }
+    const finalId=`${maxPrefix+1}${idSuffix}`;
+    const rowValues=fields.map(name=>{
+      if(name==="Id")return finalId;
+      const value=values[name];
+      return value===undefined?"":value;
+    });
+    await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[rowValues]})});
+    return finalId;
+  }
+  const sheetRow=targetRow+1;
+  const data=[];
+  for(const name of fields){
+    if(name==="Id")continue;
+    const col=header.indexOf(name);
+    if(col<0)continue;
+    const value=values[name];
+    data.push({range:`${quotedTitle}!${colLetter(col)}${sheetRow}`,values:[[value===undefined?"":value]]});
+  }
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+  return idValue;
+}
+
+ipcMain.handle("google:save-offer",async(_event,payload)=>{
+  const {offer}=payload||{};
+  if(!offer)throw new Error("Нет данных оффера");
+  const accessToken=await getGoogleAccessToken();
+  const priceTiers=await readPriceTiers(accessToken);
+
+  let guiId=offer.GameOfferGui||"";
+  if(offer.gui){
+    guiId=await upsertGameOffersRow(accessToken,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.gui.__new?null:offer.gui.Id,offer.gui,"213");
+  }
+  let guiDoubleId=offer.GameOfferGuiDouble||"";
+  if(offer.Type==="Double"&&offer.guiDouble){
+    guiDoubleId=await upsertGameOffersRow(accessToken,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.guiDouble.__new?null:offer.guiDouble.Id,offer.guiDouble,"213");
+  }
+
+  const values={...offer,GameOfferGui:guiId,GameOfferGuiDouble:offer.Type==="Double"?guiDoubleId:"","$":priceTiers[offer.PriceTier]||""};
+  const finalId=await upsertGameOffersRow(accessToken,gameOfferGid,GAME_OFFER_FIELDS,offer.__new?null:offer.Id,values,"211");
+  return {id:finalId,guiId,guiDoubleId,price:priceTiers[offer.PriceTier]||""};
+});
+
+ipcMain.handle("google:delete-offer",async(_event,payload)=>{
+  const {id}=payload||{};
+  if(!id)throw new Error("Не указан id оффера");
+  const accessToken=await getGoogleAccessToken();
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gameOfferGid);
+  if(!sheet)throw new Error("Лист не найден");
+  const {rows}=await readSheetValues(accessToken,gameOffersSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("Id")&&row.includes("Label"));
+  const idCol=rows[headerIdx].indexOf("Id");
+  let rowIndex=-1;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    if(rows[i]&&String(rows[i][idCol])===String(id)){rowIndex=i;break}
+  }
+  if(rowIndex<0)throw new Error("Оффер не найден в таблице");
+  await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId:gameOfferGid,dimension:"ROWS",startIndex:rowIndex,endIndex:rowIndex+1}}}]})});
+  return {deleted:true};
 });
 
 const BOARD_META_FIELDS=["EventId","Style","MechanicIds","InfoStageDuration","ActiveStageDuration","AddedStageDuration","TimeUntilEndActiveStageForPopUp","MainPrefabName","NotificationPrefabName","LobbyButtonPrefabName","InfoPrefabName","InfoPopupPreviewRewards"];
