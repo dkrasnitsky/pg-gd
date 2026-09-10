@@ -1097,7 +1097,8 @@ async function readMapsSheetColumnA(accessToken,gid){
   for(const row of rows){
     const value=String((row&&row[0])||"").trim();
     if(!value||value.toLowerCase()==="map")continue;
-    scenes.push(value);
+    const next=String((row&&row[1])||"").trim();
+    scenes.push({scene:value,nextScene:(next&&next!==value)?next:null});
   }
   return scenes;
 }
@@ -1132,7 +1133,10 @@ ipcMain.handle("google:sync-active-maps",async()=>{
     const scenes=await readMapsSheetColumnA(accessToken,tab.gid);
     groups.push({
       mode:tab.label,
-      maps:scenes.map(scene=>({scene,displayName:overviewNames[scene]||""})),
+      maps:scenes.map(({scene,nextScene})=>({
+        scene,displayName:overviewNames[scene]||"",
+        nextScene:nextScene||null,nextDisplayName:nextScene?(overviewNames[nextScene]||""):"",
+      })),
     });
   }
   return {groups};

@@ -455,6 +455,11 @@ function ActiveMapsModal({onClose}){
               <div key={map.scene} style={{display:"flex",gap:8,fontSize:12,padding:"3px 4px",color:"#c3d8c5"}}>
                 <span style={{opacity:0.8}}>{map.scene}</span>
                 <span style={{opacity:0.6}}>{map.displayName?`(${map.displayName})`:""}</span>
+                {map.nextScene && <>
+                  <span style={{opacity:0.5,margin:"0 2px"}}>→</span>
+                  <span style={{opacity:0.9,color:"#ff7348"}}>{map.nextScene}</span>
+                  <span style={{opacity:0.6}}>{map.nextDisplayName?`(${map.nextDisplayName})`:""}</span>
+                </>}
               </div>
             ))}
           </div>
