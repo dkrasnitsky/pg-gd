@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   saveOffer: (payload) => ipcRenderer.invoke("google:save-offer", payload),
   deleteOffer: (payload) => ipcRenderer.invoke("google:delete-offer", payload),
   applyOfferCampaign: (payload) => ipcRenderer.invoke("google:apply-offer-campaign", payload),
+  syncActiveMaps: () => ipcRenderer.invoke("google:sync-active-maps"),
   getRewardPools: () => ipcRenderer.invoke("google:get-reward-pools"),
   applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
   getNextCardRouletteId: (isTest) => ipcRenderer.invoke("google:get-next-card-roulette-id", isTest),

@@ -431,6 +431,40 @@ const splitDateTime=iso=>{
   return {date:match[1],time:match[2]||"09:00"};
 };
 
+function ActiveMapsModal({onClose}){
+  const [groups,setGroups]=useState(null);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    window.workspaceGoogle?.syncActiveMaps().then(result=>{
+      setGroups(result?.groups||[]);
+    }).catch(e=>setError(e.message||"Ошибка чтения таблицы карт"));
+  },[]);
+
+  return (
+    <div className="event-modal-backdrop" style={{position:"fixed",zIndex:70}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="event-modal" style={{width:"min(520px,100%)",maxHeight:"85vh",overflowY:"auto"}}>
+        <header><div><span>MAPS</span><h2>Актуальный список запущенных карт</h2></div><button onClick={onClose}><FiX/></button></header>
+        {error && <div className="config-status error">{error}</div>}
+        {!error && groups===null && <div style={{padding:16,color:"#91a293",fontSize:12}}>Читаем таблицу карт...</div>}
+        {groups && groups.map((group,index)=>(
+          <div key={group.mode} style={{marginTop:index>0?16:0}}>
+            <div style={{fontSize:13,fontWeight:800,color:"#c3d8c5",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{group.mode}</div>
+            {group.maps.length===0 && <div style={{fontSize:12,color:"#91a293",paddingLeft:4}}>—</div>}
+            {group.maps.map(map=>(
+              <div key={map.scene} style={{display:"flex",gap:8,fontSize:12,padding:"3px 4px",color:"#c3d8c5"}}>
+                <span style={{opacity:0.8}}>{map.scene}</span>
+                <span style={{opacity:0.6}}>{map.displayName?`(${map.displayName})`:""}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+        <footer><button className="secondary-action" onClick={onClose}>Закрыть</button></footer>
+      </div>
+    </div>
+  );
+}
+
 function EventCenterSyncModal({events,onClose,onApply}){
   const [newGroups,setNewGroups]=useState(null);
   const [statusChanges,setStatusChanges]=useState([]);
@@ -656,6 +690,7 @@ export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
   const [configState,setConfigState]=useState({status:"idle",message:""});
   const [showConfigurator,setShowConfigurator]=useState(false);
   const [showSync,setShowSync]=useState(false);
+  const [showMaps,setShowMaps]=useState(false);
   const [enableStatus,setEnableStatus]=useState({state:"idle",message:""});
   const days=useMemo(()=>Array.from({length:new Date(cursor.getFullYear(),cursor.getMonth()+1,0).getDate()},(_,index)=>new Date(cursor.getFullYear(),cursor.getMonth(),index+1)),[cursor]);
   const monthStart=iso(days[0]),monthEnd=iso(days[days.length-1]);
@@ -760,7 +795,7 @@ export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
   };
 
   return <div className="event-calendar-page">
-    <header className="feature-header"><div><div className="feature-kicker">LIVEOPS PLANNING SYSTEM</div><h1>График ивентов</h1></div><div className="month-switch"><button aria-label="Предыдущий месяц" onClick={()=>changeMonth(-1)}><FiChevronLeft/></button><strong>{cursor.toLocaleDateString("ru-RU",{month:"long",year:"numeric"})}</strong><button aria-label="Следующий месяц" onClick={()=>changeMonth(1)}><FiChevronRight/></button><button className="today-action" onClick={()=>setCursor(new Date(today.getFullYear(),today.getMonth(),1))}>Сегодня</button><button className="today-action" onClick={()=>setShowSync(true)}>Синхронизировать с EventCenterConfig</button></div></header>
+    <header className="feature-header"><div><div className="feature-kicker">LIVEOPS PLANNING SYSTEM</div><h1>График ивентов</h1></div><div className="month-switch"><button aria-label="Предыдущий месяц" onClick={()=>changeMonth(-1)}><FiChevronLeft/></button><strong>{cursor.toLocaleDateString("ru-RU",{month:"long",year:"numeric"})}</strong><button aria-label="Следующий месяц" onClick={()=>changeMonth(1)}><FiChevronRight/></button><button className="today-action" onClick={()=>setCursor(new Date(today.getFullYear(),today.getMonth(),1))}>Сегодня</button><button className="today-action" onClick={()=>setShowSync(true)}>Синхронизировать с EventCenterConfig</button><button className="today-action" onClick={()=>setShowMaps(true)}>Карты</button></div></header>
     <div className="calendar-board">
       <div className="calendar-days" style={{gridTemplateColumns:`repeat(${days.length},minmax(34px,1fr))`}}>{days.map(day=><button key={iso(day)} className={iso(day)===iso(today)?"today":""} onClick={()=>createAt(day)}><span>{day.toLocaleDateString("ru-RU",{weekday:"short"})}</span><b>{day.getDate()}</b></button>)}</div>
       <div className="calendar-timeline" style={{"--days":days.length,height:timelineHeight}} onDoubleClick={event=>{if(event.target===event.currentTarget){const rect=event.currentTarget.getBoundingClientRect();createAt(days[clamp(Math.floor((event.clientX-rect.left)/(rect.width/days.length)),0,days.length-1)])}}}>
@@ -776,5 +811,6 @@ export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
     {showConfigurator&&selected&&selected.type==="Personal Event"&&<PersonalEventConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({personalEventConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Offers"&&<OfferCampaignConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update(cfg)} onOpenOffer={onOpenOffer}/>}
     {showSync&&<EventCenterSyncModal events={events} onClose={()=>setShowSync(false)} onApply={applySync}/>}
+    {showMaps&&<ActiveMapsModal onClose={()=>setShowMaps(false)}/>}
   </div>;
 }

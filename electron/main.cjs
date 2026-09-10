@@ -32,6 +32,15 @@ const gameOffersSpreadsheetId="1vlDGjRJqApHyicMYLd9PtFhL9C5FCl0jhD0N4D2zyWs";
 const gameOfferGid=1298282127;
 const gameOfferGuiGid=1741583800;
 const priceTierGid=739652503;
+const activeMapsSpreadsheetId="1e_y2x7YRupUSDXxhpsiOLzKTcDE8yq4oahgRiNgNfHU";
+const activeMapsOverviewGid=1340983618;
+const activeMapsModeTabs=[
+  {gid:731056815,label:"Team Fight"},
+  {gid:1493905143,label:"Deathmatch"},
+  {gid:1264631773,label:"Flag Capture"},
+  {gid:1704910560,label:"Capture Points"},
+  {gid:1035921361,label:"Duel"},
+];
 const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
@@ -1076,6 +1085,57 @@ ipcMain.handle("google:delete-offer",async(_event,payload)=>{
   if(rowIndex<0)throw new Error("Оффер не найден в таблице");
   await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId:gameOfferGid,dimension:"ROWS",startIndex:rowIndex,endIndex:rowIndex+1}}}]})});
   return {deleted:true};
+});
+
+async function readMapsSheetColumnA(accessToken,gid){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${activeMapsSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист не найден в таблице карт");
+  const {rows}=await readSheetValues(accessToken,activeMapsSpreadsheetId,sheet.properties.title);
+  const scenes=[];
+  for(const row of rows){
+    const value=String((row&&row[0])||"").trim();
+    if(!value||value.toLowerCase()==="map")continue;
+    scenes.push(value);
+  }
+  return scenes;
+}
+
+async function readMapsOverviewNames(accessToken){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${activeMapsSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===activeMapsOverviewGid);
+  if(!sheet)throw new Error("Лист Overview не найден");
+  const {rows}=await readSheetValues(accessToken,activeMapsSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("Prefab")&&row.includes("ENG"));
+  if(headerIdx<0)return {};
+  const header=rows[headerIdx];
+  const prefabCol=header.indexOf("Prefab");
+  const engCol=header.indexOf("ENG");
+  const map={};
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row)continue;
+    const prefab=String(row[prefabCol]||"").trim();
+    if(!prefab)continue;
+    if(map[prefab]===undefined)map[prefab]=String(row[engCol]||"").trim();
+  }
+  return map;
+}
+
+ipcMain.handle("google:sync-active-maps",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const overviewNames=await readMapsOverviewNames(accessToken);
+  const groups=[];
+  for(const tab of activeMapsModeTabs){
+    const scenes=await readMapsSheetColumnA(accessToken,tab.gid);
+    groups.push({
+      mode:tab.label,
+      maps:scenes.map(scene=>({scene,displayName:overviewNames[scene]||""})),
+    });
+  }
+  return {groups};
 });
 
 const BOARD_META_FIELDS=["EventId","Style","MechanicIds","InfoStageDuration","ActiveStageDuration","AddedStageDuration","TimeUntilEndActiveStageForPopUp","MainPrefabName","NotificationPrefabName","LobbyButtonPrefabName","InfoPrefabName","InfoPopupPreviewRewards"];
