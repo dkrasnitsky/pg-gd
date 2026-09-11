@@ -14,7 +14,7 @@ const cardRouletteTestSpreadsheetId="1lIRQ8FT0vWZcsgHwl1clhZrNuY2RxCGV7faf_0hl5J
 const cardRouletteScheduleGid=1041170058;
 const eventCenterCardRouletteGid=641877320;
 const eventCenterTestCardRouletteGid=387562133;
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances","gameOffersCache"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances","gameOffersCache","traderVanBalances"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const lotteryTestSpreadsheetId="10s8UQTOfFupR3afkyU0nmvKo_crLPjREHFTolesQK54";
@@ -31,6 +31,7 @@ const eventCenterPixelPassGid=1170504714;
 const gameOffersSpreadsheetId="1vlDGjRJqApHyicMYLd9PtFhL9C5FCl0jhD0N4D2zyWs";
 const gameOfferGid=1298282127;
 const gameOfferGuiGid=1741583800;
+const gameOffersTestSpreadsheetId="1doZu0uLJTyNiAlx1D3SHih4Lw6AJDvVNpxMMvx6pjLE";
 const priceTierGid=739652503;
 const activeMapsSpreadsheetId="1e_y2x7YRupUSDXxhpsiOLzKTcDE8yq4oahgRiNgNfHU";
 const activeMapsOverviewGid=1340983618;
@@ -45,6 +46,9 @@ const tierSpreadsheetId="1YKQ4dtCBeUVpMy1oaBxFC-nS4udGHvjYU_qx7U1HTMs";
 const tierSheetGid=619054802;
 const nameSheetGid=1632164539;
 const contentPoolSpreadsheetId="1uOsaKGRCU1gghA5yGFDGXNl13bP5IwP5GnbO8VksLfM";
+const traderVanSpreadsheetId="1qKogyjkoHpO6imV1aU5ZyWKpFuF9Hr_qPYyc8RpamfE";
+const traderVanGid=1806543965;
+const TRADER_VAN_FIELDS=["i_season","s_style","season","Show Van In Lobby","buylimit","id","start","end","price","sale","order","content","show_timer","price_amount"];
 const personalEventScheduleSpreadsheetId="12WklJDMluXtBqlRzJblNLVvxXqh86R4hKbdLw7Mm-KE";
 const personalEventBoardSpreadsheetId="18NncLI5KUdqG-j4C81P-smduV5Yz5yiUNU2IEquYX2Y";
 const personalEventLinearSpreadsheetId="1nW_7hBl2bcdJ_kvsp8QESkMgw6Fk1_wYclcPUKGHyKw";
@@ -999,13 +1003,13 @@ ipcMain.handle("google:sync-offers",async()=>{
   return {offers,priceTiers,listOptions};
 });
 
-async function upsertGameOffersRow(accessToken,gid,fields,idValue,values,idSuffix){
-  const api=`https://sheets.googleapis.com/v4/spreadsheets/${gameOffersSpreadsheetId}`;
+async function upsertGameOffersRow(accessToken,spreadsheetId,gid,fields,idValue,values,idSuffix){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
   if(!sheet)throw new Error("Лист не найден в GameOffersSystem");
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-  const {rows}=await readSheetValues(accessToken,gameOffersSpreadsheetId,sheet.properties.title);
+  const {rows}=await readSheetValues(accessToken,spreadsheetId,sheet.properties.title);
   const headerIdx=rows.findIndex(row=>row.includes("Id")&&row.includes("Label"));
   if(headerIdx<0)throw new Error("Не найдена шапка таблицы");
   const header=rows[headerIdx];
@@ -1055,15 +1059,15 @@ ipcMain.handle("google:save-offer",async(_event,payload)=>{
 
   let guiId=offer.GameOfferGui||"";
   if(offer.gui){
-    guiId=await upsertGameOffersRow(accessToken,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.gui.__new?null:offer.gui.Id,offer.gui,"213");
+    guiId=await upsertGameOffersRow(accessToken,gameOffersSpreadsheetId,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.gui.__new?null:offer.gui.Id,offer.gui,"213");
   }
   let guiDoubleId=offer.GameOfferGuiDouble||"";
   if(offer.Type==="Double"&&offer.guiDouble){
-    guiDoubleId=await upsertGameOffersRow(accessToken,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.guiDouble.__new?null:offer.guiDouble.Id,offer.guiDouble,"213");
+    guiDoubleId=await upsertGameOffersRow(accessToken,gameOffersSpreadsheetId,gameOfferGuiGid,GAME_OFFER_GUI_FIELDS,offer.guiDouble.__new?null:offer.guiDouble.Id,offer.guiDouble,"213");
   }
 
   const values={...offer,GameOfferGui:guiId,GameOfferGuiDouble:offer.Type==="Double"?guiDoubleId:"","$":priceTiers[offer.PriceTier]||""};
-  const finalId=await upsertGameOffersRow(accessToken,gameOfferGid,GAME_OFFER_FIELDS,offer.__new?null:offer.Id,values,"211");
+  const finalId=await upsertGameOffersRow(accessToken,gameOffersSpreadsheetId,gameOfferGid,GAME_OFFER_FIELDS,offer.__new?null:offer.Id,values,"211");
   return {id:finalId,guiId,guiDoubleId,price:priceTiers[offer.PriceTier]||""};
 });
 
@@ -1085,6 +1089,55 @@ ipcMain.handle("google:delete-offer",async(_event,payload)=>{
   if(rowIndex<0)throw new Error("Оффер не найден в таблице");
   await sheetsRequest(accessToken,`${api}:batchUpdate`,{method:"POST",body:JSON.stringify({requests:[{deleteDimension:{range:{sheetId:gameOfferGid,dimension:"ROWS",startIndex:rowIndex,endIndex:rowIndex+1}}}]})});
   return {deleted:true};
+});
+
+async function upsertByExactId(accessToken,spreadsheetId,gid,idValue,values){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===gid);
+  if(!sheet)throw new Error("Лист не найден в тестовой GameOffersSystem");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const {rows}=await readSheetValues(accessToken,spreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("Id")&&row.includes("Label"));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы в тестовой GameOffersSystem");
+  const header=rows[headerIdx];
+  const idCol=header.indexOf("Id");
+  let targetRow=-1;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    if(rows[i]&&String(rows[i][idCol])===String(idValue)){targetRow=i;break}
+  }
+  if(targetRow<0){
+    const rowValues=header.map(name=>{
+      const value=values[name];
+      return value===undefined?"":value;
+    });
+    await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[rowValues]})});
+    return;
+  }
+  const sheetRow=targetRow+1;
+  const data=[];
+  for(const name of Object.keys(values)){
+    const col=header.indexOf(name);
+    if(col<0)continue;
+    data.push({range:`${quotedTitle}!${colLetter(col)}${sheetRow}`,values:[[values[name]===undefined?"":values[name]]]});
+  }
+  if(data.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data})});
+}
+
+ipcMain.handle("google:apply-offer-campaign-test",async(_event,payload)=>{
+  const {offers,startTime,endTime}=payload||{};
+  if(!Array.isArray(offers)||!offers.length)throw new Error("Нет офферов для копирования в тест");
+  const accessToken=await getGoogleAccessToken();
+  let updated=0;
+  for(const offer of offers){
+    if(!offer.Id)continue;
+    const {gui,guiDouble,...offerFields}=offer;
+    if(gui&&gui.Id)await upsertByExactId(accessToken,gameOffersTestSpreadsheetId,gameOfferGuiGid,gui.Id,gui);
+    if(guiDouble&&guiDouble.Id)await upsertByExactId(accessToken,gameOffersTestSpreadsheetId,gameOfferGuiGid,guiDouble.Id,guiDouble);
+    await upsertByExactId(accessToken,gameOffersTestSpreadsheetId,gameOfferGid,offer.Id,{...offerFields,StartTime:startTime,EndTime:endTime});
+    updated++;
+  }
+  return {updated};
 });
 
 async function readMapsSheetColumnA(accessToken,gid){
@@ -1140,6 +1193,71 @@ ipcMain.handle("google:sync-active-maps",async()=>{
     });
   }
   return {groups};
+});
+
+async function findTraderVanSheetInfo(accessToken){
+  const api=`https://sheets.googleapis.com/v4/spreadsheets/${traderVanSpreadsheetId}`;
+  const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+  const sheet=(meta.sheets||[]).find(entry=>entry.properties.sheetId===traderVanGid);
+  if(!sheet)throw new Error("Лист Trader Van не найден");
+  const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
+  const {rows}=await readSheetValues(accessToken,traderVanSpreadsheetId,sheet.properties.title);
+  const headerIdx=rows.findIndex(row=>row.includes("i_season")&&row.includes("s_style"));
+  if(headerIdx<0)throw new Error("Не найдена шапка таблицы Trader Van");
+  return {api,quotedTitle,rows,header:rows[headerIdx],headerIdx};
+}
+
+async function getNextTraderVanSeason(accessToken){
+  const {rows,header,headerIdx}=await findTraderVanSheetInfo(accessToken);
+  const seasonCol=header.indexOf("i_season");
+  let max=0;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row=rows[i];
+    if(!row)continue;
+    const value=Number(row[seasonCol]);
+    if(Number.isFinite(value)&&value>max)max=value;
+  }
+  return max+1;
+}
+
+ipcMain.handle("google:get-next-trader-van-id",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  return {nextId:await getNextTraderVanSeason(accessToken)};
+});
+
+ipcMain.handle("google:apply-trader-van",async(_event,payload)=>{
+  const {sStyle,season,items}=payload||{};
+  if(!Array.isArray(items)||!items.length)throw new Error("Добавьте хотя бы один предмет");
+  const accessToken=await getGoogleAccessToken();
+  const {api,quotedTitle,header}=await findTraderVanSheetInfo(accessToken);
+  const nextId=await getNextTraderVanSeason(accessToken);
+  const columns=Object.fromEntries(TRADER_VAN_FIELDS.map(name=>[name,header.indexOf(name)]));
+  const width=header.length;
+  const toNumberOrBlank=value=>{
+    if(value===undefined||value===null||value==="")return "";
+    const num=Number(value);
+    return Number.isFinite(num)?num:value;
+  };
+  const rows=items.map((item,index)=>{
+    const row=new Array(width).fill("");
+    const set=(name,value)=>{if(columns[name]>=0)row[columns[name]]=value};
+    if(index===0)set("i_season",nextId);
+    set("s_style",sStyle||"basic");
+    set("season",season||"basic");
+    set("buylimit",toNumberOrBlank(item.buyLimit));
+    set("id",index+1);
+    set("start",item.startDate?`${item.startDate}T09:00:00`:"");
+    set("end",item.endDate?`${item.endDate}T09:00:00`:"");
+    set("price",item.price||"");
+    set("sale",toNumberOrBlank(item.sale));
+    set("order",index+1);
+    set("content",item.content||"");
+    set("show_timer",!!item.showTimer);
+    set("price_amount",toNumberOrBlank(item.priceAmount));
+    return row;
+  });
+  await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:rows})});
+  return {seasonId:nextId};
 });
 
 const BOARD_META_FIELDS=["EventId","Style","MechanicIds","InfoStageDuration","ActiveStageDuration","AddedStageDuration","TimeUntilEndActiveStageForPopUp","MainPrefabName","NotificationPrefabName","LobbyButtonPrefabName","InfoPrefabName","InfoPopupPreviewRewards"];

@@ -625,6 +625,18 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
     doApply(overrideIds);
   };
 
+  const applyTest=async()=>{
+    if(!addedIds.length){setStatus({state:"error",message:"Добавьте хотя бы один оффер"});return}
+    setStatus({state:"loading",message:"Копируем в тестовую GameOffersSystem..."});
+    try{
+      const startTime=`${startDate}:00`,endTime=`${endDate}:00`;
+      const result=await window.workspaceGoogle?.applyOfferCampaignTest({offers:addedOffers,startTime,endTime});
+      setStatus({state:"success",message:`Готово (ТЕСТ): скопировано офферов ${result.updated}`});
+    }catch(error){
+      setStatus({state:"error",message:error.message||"Ошибка"});
+    }
+  };
+
   return (
     <div className="event-modal-backdrop" style={{position:"fixed",zIndex:70}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="event-modal" style={{width:"min(640px,100%)",maxHeight:"85vh",overflowY:"auto"}}>
@@ -678,6 +690,7 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
         {status.message && <div className={`config-status ${status.state}`}>{status.message}</div>}
         <footer>
           <button className="secondary-action" onClick={onClose}>Отменить</button>
+          {!conflicts && <button className="secondary-action" disabled={status.state==="loading"} onClick={applyTest}>Тест</button>}
           {!conflicts && <button className="primary-action" disabled={status.state==="loading"} onClick={createConfigClick}>Создать конфиг</button>}
         </footer>
       </div>
