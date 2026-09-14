@@ -35,7 +35,7 @@
     "appId": "com.pg3d.workspace",
     "productName": "PG3D Workspace",
     "directories": {
-      "output": "release-v69"
+      "output": "release-v70"
     },
     "files": [
       "dist/**/*",
