@@ -890,6 +890,17 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       setImportStatus(`Добавлено: ${result?.added||0}, удалено: ${result?.removed||0}, иконок: ${result?.iconsFilled||0} (всего: ${result?.total??items.length}) | debug: строк в таблице=${result?.debug?.xlsxRows}, отмечено как «из таблицы» задним числом=${result?.debug?.markedExisting}`);
     }catch(e){setImportStatus("Ошибка импорта: "+e.message)}
   };
+  const [analyticsStatus,setAnalyticsStatus]=useState("");
+  const refreshAnalytics=async()=>{
+    if(!window.workspaceCatalog){setAnalyticsStatus("Синхронизация недоступна вне приложения");return}
+    setAnalyticsStatus("Читаем таблицу аналитики…");
+    try{
+      await window.workspaceCatalog.refreshAnalytics();
+      const fresh=await window.workspaceStore.read("items");
+      if(Array.isArray(fresh))onItemsChange(fresh);
+      setAnalyticsStatus("Готово — тиры/тип/редкость/летальность/распространённость обновлены у всех предметов");
+    }catch(e){setAnalyticsStatus("Ошибка: "+e.message)}
+  };
   const [namesStatus,setNamesStatus]=useState("");
   const syncRealNames=async()=>{
     if(!window.workspaceCatalog){setNamesStatus("Синхронизация недоступна вне приложения");return}
@@ -925,6 +936,8 @@ function ItemCatalogPanel({items,onItemsChange,onSwitchMode,onClose,settingsList
       <button className="settings-add" onClick={addItem}><FiPlus/>Добавить предмет</button>
       <button className="settings-add" onClick={importFromSheet} style={{marginTop:6}}>Обновить из таблицы</button>
       {importStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{importStatus}</div>}
+      <button className="settings-add" onClick={refreshAnalytics} style={{marginTop:6}}>Обновить тиры/тип/редкость</button>
+      {analyticsStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{analyticsStatus}</div>}
       <button className="settings-add" onClick={syncRealNames} style={{marginTop:6}}>Обновить названия (Unity)</button>
       {namesStatus&&<div style={{fontSize:11,color:T2,padding:"4px 2px"}}>{namesStatus}</div>}
       <div className="settings-list">{groupedByType.map(([type,groupItems])=>{

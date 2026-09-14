@@ -72,5 +72,6 @@ contextBridge.exposeInMainWorld("iconLibrary", {
 
 contextBridge.exposeInMainWorld("workspaceCatalog", {
   syncFromXlsx: () => ipcRenderer.invoke("catalog:sync-from-xlsx"),
+  refreshAnalytics: () => ipcRenderer.invoke("catalog:refresh-analytics"),
   syncRealNames: () => ipcRenderer.invoke("catalog:sync-real-names"),
 });

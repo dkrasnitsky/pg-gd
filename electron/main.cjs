@@ -1704,12 +1704,12 @@ async function fetchWeaponAnalytics(accessToken){
   const lookup=new Map();
   if(!sheet)return lookup;
   const quotedTitle=`'${sheet.properties.title.replace(/'/g,"''")}'`;
-  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:V`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
+  const valuesResponse=await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(`${quotedTitle}!E:Z`)}?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`);
   const clean=value=>{const text=value===undefined||value===null?"":String(value).trim();return (!text||text.startsWith("#"))?"":text};
   for(const row of valuesResponse.values||[]){
     const key=String(row[0]??"").trim().toLowerCase();
     if(!key||lookup.has(key))continue;
-    lookup.set(key,{type:clean(row[2]),rarity:clean(row[3]),tier:clean(row[5]),lethality:clean(row[13]),prevalence:clean(row[17])});
+    lookup.set(key,{type:clean(row[1]),rarity:clean(row[2]),tier:clean(row[7]),lethality:clean(row[15]),prevalence:clean(row[19])});
   }
   return lookup;
 }
@@ -1863,6 +1863,11 @@ ipcMain.handle("google:fetch-tier",async(_event,tag)=>{
   const accessToken=await getGoogleAccessToken();
   const analytics=await fetchWeaponAnalytics(accessToken);
   return analytics.get(needle)||null;
+});
+
+ipcMain.handle("catalog:refresh-analytics",async()=>{
+  await runWeaponAutoSync();
+  return {refreshed:true};
 });
 
 function iconLibraryDir(){return liveIconsItemsDir}

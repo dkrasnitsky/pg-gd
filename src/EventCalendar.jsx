@@ -13,7 +13,7 @@ const TOP_PADDING=18;
 function LotteryConfigurator({event,onClose,onSave}){
   const [partitions,setPartitions]=useState(()=>{
     if(event.lotteryConfig?.partitions?.length)return event.lotteryConfig.partitions;
-    return [{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",style:"",segment:"",startDateTime:`${event.start}T${event.startTime||"10:00"}`,endDateTime:`${event.end}T${event.endTime||"10:00"}`,balanceName:""}];
+    return [{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",committed:false,style:"",segment:"",startDateTime:`${event.start}T${event.startTime||"10:00"}`,endDateTime:`${event.end}T${event.endTime||"10:00"}`,balanceName:""}];
   });
   const [segments,setSegments]=useState([]);
   const [balances,setBalances]=useState([]);
@@ -37,7 +37,7 @@ function LotteryConfigurator({event,onClose,onSave}){
   },[]);
 
   const updatePartition=(uid,patch)=>setPartitions(prev=>prev.map(p=>p.uid===uid?{...p,...patch}:p));
-  const addPartition=()=>setPartitions(prev=>[...prev,{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",style:"",segment:"",startDateTime:prev[0]?.startDateTime||"",endDateTime:prev[0]?.endDateTime||"",balanceName:""}]);
+  const addPartition=()=>setPartitions(prev=>[...prev,{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",committed:false,style:"",segment:"",startDateTime:prev[0]?.startDateTime||"",endDateTime:prev[0]?.endDateTime||"",balanceName:""}]);
   const removePartition=uid=>setPartitions(prev=>prev.filter(p=>p.uid!==uid));
 
   const saveDraft=()=>{onSave({partitions});onClose()};
@@ -45,7 +45,9 @@ function LotteryConfigurator({event,onClose,onSave}){
   const apply=async(target)=>{
     setStatus({state:"loading",message:`Создаём конфиг${target==="test"?" (ТЕСТ)":""}…`});
     const results=[];
-    for(const partition of partitions){
+    const updated=[...partitions];
+    for(let index=0;index<partitions.length;index++){
+      const partition=partitions[index];
       const balance=balances.find(b=>b.name===partition.balanceName);
       const balanceItems=balance?Object.values(balance.chests).flatMap((chestItemList,ci)=>{
         const start=(ci+1)*100+1;
@@ -70,11 +72,13 @@ function LotteryConfigurator({event,onClose,onSave}){
           balanceItems,balanceName:partition.balanceName,target,
         });
         results.push(`✓ ${partition.name}: ${result.names.join(", ")}`);
+        updated[index]={...updated[index],committed:true};
       }catch(error){
         results.push(`✗ ${partition.name}: ${error.message||"ошибка"}`);
       }
     }
-    onSave({partitions});
+    setPartitions(updated);
+    onSave({partitions:updated});
     setStatus({state:results.some(r=>r.startsWith("✗"))?"error":"success",message:results.join("\n")});
   };
 
@@ -87,7 +91,7 @@ function LotteryConfigurator({event,onClose,onSave}){
             {partitions.length>1&&<button type="button" onClick={()=>removePartition(p.uid)} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",color:"#ff5d55",cursor:"pointer"}}><FiTrash2/></button>}
             <label>Name<input value={p.name} onChange={e=>updatePartition(p.uid,{name:e.target.value})}/></label>
             <div className="form-columns">
-              <label>Id{index===0&&idLoading?" (загрузка…)":""}<input value={p.id} onChange={e=>updatePartition(p.uid,{id:e.target.value})} placeholder={index>0?"впишите вручную":""}/></label>
+              <label>Id{index===0&&idLoading?" (загрузка…)":p.committed?" (создан)":""}<input value={p.id} disabled={p.committed} onChange={e=>updatePartition(p.uid,{id:e.target.value})} placeholder={index>0?"впишите вручную":""}/></label>
               <label>style<input value={p.style} onChange={e=>updatePartition(p.uid,{style:e.target.value})}/></label>
             </div>
             <label>segment<select value={p.segment} onChange={e=>updatePartition(p.uid,{segment:e.target.value})}><option value="">—</option>{segments.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
@@ -137,7 +141,7 @@ function CardRouletteConfigurator({event,onClose,onSave}){
   },[]);
 
   const updatePartition=(uid,patch)=>setPartitions(prev=>prev.map(p=>p.uid===uid?{...p,...patch}:p));
-  const addPartition=()=>setPartitions(prev=>[...prev,{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",style:"",segment:"",startDateTime:prev[0]?.startDateTime||"",endDateTime:prev[0]?.endDateTime||"",balanceName:""}]);
+  const addPartition=()=>setPartitions(prev=>[...prev,{uid:`p-${Date.now()}`,name:event.title.replace(/\s+/g,""),id:"",committed:false,style:"",segment:"",startDateTime:prev[0]?.startDateTime||"",endDateTime:prev[0]?.endDateTime||"",balanceName:""}]);
   const removePartition=uid=>setPartitions(prev=>prev.filter(p=>p.uid!==uid));
 
   const saveDraft=()=>{onSave({partitions});onClose()};
@@ -145,7 +149,9 @@ function CardRouletteConfigurator({event,onClose,onSave}){
   const apply=async(target)=>{
     setStatus({state:"loading",message:`Создаём конфиг${target==="test"?" (ТЕСТ)":""}…`});
     const results=[];
-    for(const partition of partitions){
+    const updated=[...partitions];
+    for(let index=0;index<partitions.length;index++){
+      const partition=partitions[index];
       const balance=balances.find(b=>b.name===partition.balanceName);
       const chests=balance?balance.chests.map((chestItems,ci)=>({
         chestNumber:ci+1,
@@ -161,11 +167,13 @@ function CardRouletteConfigurator({event,onClose,onSave}){
           chests,target,
         });
         results.push(`✓ ${partition.name}: ${result.names.settings}, ${result.names.chests}`);
+        updated[index]={...updated[index],committed:true};
       }catch(error){
         results.push(`✗ ${partition.name}: ${error.message||"ошибка"}`);
       }
     }
-    onSave({partitions});
+    setPartitions(updated);
+    onSave({partitions:updated});
     setStatus({state:results.some(r=>r.startsWith("✗"))?"error":"success",message:results.join("\n")});
   };
 
@@ -178,7 +186,7 @@ function CardRouletteConfigurator({event,onClose,onSave}){
             {partitions.length>1&&<button type="button" onClick={()=>removePartition(p.uid)} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",color:"#ff5d55",cursor:"pointer"}}><FiTrash2/></button>}
             <label>Name<input value={p.name} onChange={e=>updatePartition(p.uid,{name:e.target.value})}/></label>
             <div className="form-columns">
-              <label>Id{index===0&&idLoading?" (загрузка…)":""}<input value={p.id} onChange={e=>updatePartition(p.uid,{id:e.target.value})} placeholder={index>0?"впишите вручную":""}/></label>
+              <label>Id{index===0&&idLoading?" (загрузка…)":p.committed?" (создан)":""}<input value={p.id} disabled={p.committed} onChange={e=>updatePartition(p.uid,{id:e.target.value})} placeholder={index>0?"впишите вручную":""}/></label>
               <label>style<input value={p.style} onChange={e=>updatePartition(p.uid,{style:e.target.value})}/></label>
             </div>
             <label>segment<select value={p.segment} onChange={e=>updatePartition(p.uid,{segment:e.target.value})}><option value="">—</option>{segments.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
@@ -241,6 +249,11 @@ function PersonalEventConfigurator({event,onClose,onSave}){
   },[subtype]);
 
   useEffect(()=>{
+    const alreadyCommitted=event.personalEventConfig?.committed&&event.personalEventConfig?.subtype===subtype;
+    if(alreadyCommitted){
+      setNextId(event.personalEventConfig.lastResult?.eventId??null);
+      return;
+    }
     setNextId(null);
     let cancelled=false;
     window.workspaceGoogle?.getNextPersonalEventId(subtype).then(info=>{
@@ -264,7 +277,7 @@ function PersonalEventConfigurator({event,onClose,onSave}){
     setPreview(null);
   };
 
-  const saveDraft=()=>{onSave({subtype,startDate,endDate,endCompletionDate,expression,groupId,note,segment,balanceName});onClose()};
+  const saveDraft=()=>{onSave({subtype,startDate,endDate,endCompletionDate,expression,groupId,note,segment,balanceName,committed:event.personalEventConfig?.subtype===subtype?event.personalEventConfig?.committed:false,lastResult:event.personalEventConfig?.subtype===subtype?event.personalEventConfig?.lastResult:undefined});onClose()};
 
   const buildPreview=()=>{
     const balance=balances.find(b=>b.name===balanceName);
@@ -357,7 +370,7 @@ function PersonalEventConfigurator({event,onClose,onSave}){
       const progressKey=progressKeys[subtype]||"Progress_Wheel_PersonalDrawerOfFortune";
       const result=await method({...preview.payload,target});
       setStatus({state:"success",message:`Готово: EventId ${result.eventId}, листы ${result.names[commonKey]}, ${result.names[progressKey]}`});
-      onSave({subtype,startDate,endDate,endCompletionDate,expression,groupId,note,segment,balanceName,lastResult:result});
+      onSave({subtype,startDate,endDate,endCompletionDate,expression,groupId,note,segment,balanceName,lastResult:result,committed:true});
     }catch(error){
       setStatus({state:"error",message:error.message||"Ошибка"});
     }
@@ -373,7 +386,7 @@ function PersonalEventConfigurator({event,onClose,onSave}){
         </select></label>
 
         <>
-          <div style={{fontSize:11,color:"#91a293",margin:"4px 0 10px"}}>Следующий Id для {subtype}: <b>{nextId??"…"}</b></div>
+          <div style={{fontSize:11,color:"#91a293",margin:"4px 0 10px"}}>{event.personalEventConfig?.committed&&event.personalEventConfig?.subtype===subtype?<>Id: <b style={{color:"#c3d8c5"}}>{nextId??"…"}</b> (уже создан)</>:<>Следующий Id для {subtype}: <b>{nextId??"…"}</b></>}</div>
           <div className="form-columns">
             <label>start date-time<input type="datetime-local" value={startDate} onChange={e=>{setStartDate(e.target.value);setPreview(null)}}/></label>
             <label>end date-time<input type="datetime-local" value={endDate} onChange={e=>onEndDateChange(e.target.value)}/></label>
@@ -698,6 +711,22 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
   );
 }
 
+function resolveEventRealId(event){
+  if(event.type==="Lottery"&&event.lotteryConfig?.partitions){
+    const ids=event.lotteryConfig.partitions.filter(p=>p.committed&&p.id).map(p=>p.id);
+    return ids.join(", ");
+  }
+  if(event.type==="Card Roulette"&&event.cardRouletteConfig?.partitions){
+    const ids=event.cardRouletteConfig.partitions.filter(p=>p.committed&&p.id).map(p=>p.id);
+    return ids.join(", ");
+  }
+  if(event.type==="Personal Event"&&event.personalEventConfig?.committed){
+    return String(event.personalEventConfig.lastResult?.eventId??"");
+  }
+  if(Array.isArray(event.sourceEventIds)&&event.sourceEventIds.length)return event.sourceEventIds.join(", ");
+  return "";
+}
+
 export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
   const today=new Date();
   const [cursor,setCursor]=useState(new Date(today.getFullYear(),today.getMonth(),1));
@@ -823,7 +852,7 @@ export default function EventCalendar({onOpenOffer,pendingCampaignOffer}){
         {!visible.length&&<button className="calendar-empty" onClick={()=>createAt(days[Math.floor(days.length/2)])}><FiPlus/>Добавить первый ивент</button>}
       </div>
     </div>
-    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header><label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={selected.enabled!==false} onChange={event=>toggleEnabled(event.target.checked)} style={{width:18,height:18,accentColor:TYPES[selected.type]||"#ff7348",cursor:"pointer"}}/><span style={{textTransform:"none",letterSpacing:0,fontWeight:400,fontSize:11}}>Включено (IsEnable в EventCenterConfig){!selected.sourceEventIds?.length&&" — не привязано, статус только локальный"}</span></label>{enableStatus.message&&<div className={`config-status ${enableStatus.state==="error"?"error":enableStatus.state==="loading"?"loading":"success"}`}>{enableStatus.message}</div>}<label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>Настроить</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
+    {selected&&<div className="event-modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedId(null)}}><div className="event-modal"><header><div><span>EVENT DATA</span><h2>{selected.title}</h2></div><button onClick={()=>setSelectedId(null)}><FiX/></button></header>{resolveEventRealId(selected)&&<div style={{fontSize:11,color:"#91a293",margin:"-6px 0 10px"}}>Id: <b style={{color:"#c3d8c5"}}>{resolveEventRealId(selected)}</b></div>}<label>Название<input value={selected.title} onChange={event=>{update({title:event.target.value});setConfigState({status:"idle",message:""})}}/></label><div className="form-columns"><label>Дата с<input type="date" value={selected.start} onInput={event=>update({start:event.currentTarget.value,end:event.currentTarget.value>selected.end?event.currentTarget.value:selected.end})}/></label><label>Дата до<input type="date" value={selected.end} onInput={event=>update({end:event.currentTarget.value<selected.start?selected.start:event.currentTarget.value})}/></label></div><div className="form-columns"><label>Время с<input type="time" value={selected.startTime} onInput={event=>update({startTime:event.currentTarget.value})}/></label><label>Время до<input type="time" value={selected.endTime} onInput={event=>update({endTime:event.currentTarget.value})}/></label></div><label>Тип ивента<select value={selected.type} onChange={event=>{update({type:event.target.value});setConfigState({status:"idle",message:""})}}>{Object.keys(TYPES).map(type=><option key={type}>{type}</option>)}</select></label><label style={{display:"flex",alignItems:"center",gap:8}}><input type="checkbox" checked={selected.enabled!==false} onChange={event=>toggleEnabled(event.target.checked)} style={{width:18,height:18,accentColor:TYPES[selected.type]||"#ff7348",cursor:"pointer"}}/><span style={{textTransform:"none",letterSpacing:0,fontWeight:400,fontSize:11}}>Включено (IsEnable в EventCenterConfig){!selected.sourceEventIds?.length&&" — не привязано, статус только локальный"}</span></label>{enableStatus.message&&<div className={`config-status ${enableStatus.state==="error"?"error":enableStatus.state==="loading"?"loading":"success"}`}>{enableStatus.message}</div>}<label>Примечание<textarea maxLength={500} value={selected.notes} onChange={event=>update({notes:event.target.value})}/><small>{selected.notes.length}/500</small></label>{configState.message&&<div className={`config-status ${configState.status}`}>{configState.message}</div>}<footer><button className="danger-action" onClick={remove}><FiTrash2/>Удалить</button><button className="secondary-action" onClick={duplicate}><FiCopy/>Дублировать</button><button className="secondary-action" disabled={configState.status==="loading"} onClick={createConfig}>Настроить</button><button className="primary-action" onClick={()=>setSelectedId(null)}>Готово</button></footer></div></div>}
     {showConfigurator&&selected&&selected.type==="Lottery"&&<LotteryConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({lotteryConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Card Roulette"&&<CardRouletteConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({cardRouletteConfig:cfg})}/>}
     {showConfigurator&&selected&&selected.type==="Personal Event"&&<PersonalEventConfigurator event={selected} onClose={()=>setShowConfigurator(false)} onSave={cfg=>update({personalEventConfig:cfg})}/>}
