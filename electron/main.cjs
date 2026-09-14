@@ -206,6 +206,21 @@ async function sheetsRequest(accessToken,url,options={}){
 
 function colLetter(index){let value=index+1,name="";while(value>0){value--;name=String.fromCharCode(65+value%26)+name;value=Math.floor(value/26)}return name}
 
+function normalizeSheetDate(value){
+  if(typeof value==="string"){
+    const trimmed=value.trim();
+    return (/^\d{4}-\d{2}-\d{2}/.test(trimmed)&&!Number.isNaN(new Date(trimmed).getTime()))?trimmed:null;
+  }
+  if(typeof value==="number"&&Number.isFinite(value)){
+    const ms=Date.UTC(1899,11,30)+value*86400000;
+    const d=new Date(ms);
+    if(Number.isNaN(d.getTime()))return null;
+    const pad=n=>String(n).padStart(2,"0");
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+  }
+  return null;
+}
+
 async function duplicateLotteryTemplateSheets(accessToken,spreadsheetId,base,isNewbies){
   const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
   const spreadsheet=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title,index)`);
@@ -368,6 +383,7 @@ async function appendLotteryRow(accessToken,spreadsheetId,lotteryGid,overrides){
   if(rows.length<2)throw new Error("На листе Lottery нет строк для копирования");
   const lastRow=[...rows[rows.length-1]];
   while(lastRow.length<8)lastRow.push("");
+  lastRow[0]=false;
   lastRow[2]=overrides.id;
   lastRow[3]=overrides.startDateTime;
   lastRow[4]=overrides.endDateTime;
@@ -508,8 +524,9 @@ async function appendCardRouletteScheduleRow(accessToken,spreadsheetId,scheduleG
   if(rows.length<2)throw new Error("На листе Schedule нет строк для копирования");
   const lastRow=[...rows[rows.length-1]];
   while(lastRow.length<6)lastRow.push("");
+  lastRow[0]=false;
   lastRow[1]=overrides.uniqueId;
-  lastRow[4]=overrides.sheetName;
+  lastRow[4]=overrides.style;
   await sheetsRequest(accessToken,`${api}/values/${encodeURIComponent(quotedTitle)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,{method:"POST",body:JSON.stringify({values:[lastRow]})});
 }
 
@@ -990,6 +1007,10 @@ ipcMain.handle("google:sync-offers",async()=>{
     readPriceTiers(accessToken),
   ]);
   const {objects:offerRows}=rowsToObjects(offerTab.rows,["Id","Label","Type"],GAME_OFFER_FIELDS);
+  for(const offer of offerRows){
+    offer.StartTime=normalizeSheetDate(offer.StartTime)||offer.StartTime;
+    offer.EndTime=normalizeSheetDate(offer.EndTime)||offer.EndTime;
+  }
   const {objects:guiRows}=rowsToObjects(guiTab.rows,["Id","Label","PrefabGuiWindow"],GAME_OFFER_GUI_FIELDS);
   const guiById=new Map(guiRows.map(gui=>[String(gui.Id),gui]));
   const offers=offerRows.map(offer=>({
@@ -1684,7 +1705,7 @@ ipcMain.handle("google:apply-card-roulette-partition",async(_event,partition)=>{
 
   const accessToken=await getGoogleAccessToken();
   const names=await duplicateCardRouletteTemplateSheets(accessToken,spId,cleanName);
-  await appendCardRouletteScheduleRow(accessToken,spId,cardRouletteScheduleGid,{uniqueId:id,sheetName:names.chests});
+  await appendCardRouletteScheduleRow(accessToken,spId,cardRouletteScheduleGid,{uniqueId:id,style:style||""});
   await appendLotteryRow(accessToken,eventCenterSpId,eventCenterGid,{id,startDateTime:startDateTime||"",endDateTime:endDateTime||"",segment:segment||"",style:style||""});
   if(Array.isArray(chests)&&chests.length){
     const chestIds=chests.map(c=>Number(c.chestNumber));

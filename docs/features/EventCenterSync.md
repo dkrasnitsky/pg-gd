@@ -72,3 +72,10 @@
 
 В основной карточке события («EVENT DATA») теперь сразу видна строка `Id: ...` — считается через `resolveEventRealId()` (для Lottery/CardRoulette — список `committed`-ид партиций, для Personal Event — `lastResult.eventId` при `committed`, для всего остального — `sourceEventIds`), без необходимости открывать конфигуратор.
 
+## 10. Ещё три фикса (Card Roulette Schedule + дедупликация + дефолтное время)
+
+- **Lottery/CardRoulette Schedule и EventCenterConfig копировали `IsEnable` с последней строки** вместо явного `false` для нового события — если последняя строка была включена, новая тоже создавалась включённой. Исправлено в общих функциях `appendLotteryRow` (EventCenterConfig, используется и Lottery, и CardRoulette) и `appendCardRouletteScheduleRow` (собственный Schedule Card Roulette) — обе теперь явно пишут `false`.
+- **В Schedule Card Roulette писалось имя листа** (`Chests_BlablablaSet`) вместо `Style` (`blablabla_set`). Исправлено — теперь пишется `style`, а не `names.chests`.
+- **Дубли при повторной синхронизации:** события, созданные вручную через Lottery/CardRoulette/PersonalEvent конфигураторы (не через синк из EventCenterConfig), не получали `sourceEventIds` — при следующей «Синхронизации с EventCenterConfig» они распознавались как «новые» и добавлялись повторно. Исправлено — при успешном `apply()` каждый конфигуратор теперь также прописывает `sourceEventIds` на верхнем уровне события (для Lottery/CardRoulette — список `committed`-id партиций; для Personal Event — `[lastResult.eventId]`).
+- Время по умолчанию для новых событий календаря — `09:00`/`09:00` (было `10:00`/`18:00`).
+

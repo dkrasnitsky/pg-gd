@@ -1,7 +1,7 @@
 {
   "name": "pg3d-dashboard",
   "private": true,
-  "version": "2.9.1",
+  "version": "2.9.2",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {

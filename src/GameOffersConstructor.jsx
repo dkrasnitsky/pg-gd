@@ -1,10 +1,28 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 
 const A="#ff7348",BG="#292929",SRF="#343934",BRD="#59645b",T1="#c3d8c5",T2="#91a293",DNG="#ff5d55";
 const inputStyle={width:"100%",background:"#1a1a22",border:`1px solid ${BRD}`,borderRadius:0,color:T1,fontSize:12,padding:"8px 10px",boxSizing:"border-box"};
 const label={fontSize:10,color:T2,marginBottom:4,textTransform:"uppercase",letterSpacing:0.5};
 
 function offerTitle(offer){return offer.Label||offer.gui?.TextTitle||`Оффер ${offer.Id}`}
+
+class OfferEditorBoundary extends Component{
+  constructor(props){super(props);this.state={error:null}}
+  static getDerivedStateFromError(error){return {error}}
+  componentDidCatch(error,info){console.error("[OfferEditor crash]",error,info)}
+  render(){
+    if(this.state.error){
+      return (
+        <div style={{color:T1,padding:24}}>
+          <div style={{marginBottom:12,color:DNG,fontSize:13,fontWeight:700}}>Ошибка при открытии редактора оффера</div>
+          <div style={{marginBottom:16,color:T2,fontSize:11,fontFamily:"monospace",whiteSpace:"pre-wrap"}}>{String(this.state.error?.message||this.state.error)}</div>
+          <button onClick={this.props.onBack} style={{padding:"8px 16px",background:A,border:"none",color:"#000",fontSize:12,fontWeight:700,cursor:"pointer"}}>← К списку офферов</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function buildCopyPayload(offer){
   const {gui,guiDouble,...rest}=offer;
@@ -38,16 +56,17 @@ function previewOldPrice(price,saleAmount){
 function ListField({lbl,value,onChange,options=[],width}){
   const [open,setOpen]=useState(false);
   const wrapRef=useRef(null);
+  const valueStr=value===undefined||value===null?"":String(value);
   useEffect(()=>{
     const onClickOutside=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target))setOpen(false)};
     document.addEventListener("mousedown",onClickOutside);
     return ()=>document.removeEventListener("mousedown",onClickOutside);
   },[]);
-  const filtered=(options||[]).filter(opt=>opt.toLowerCase().includes((value||"").toLowerCase()));
+  const filtered=(options||[]).filter(opt=>String(opt).toLowerCase().includes(valueStr.toLowerCase()));
   return (
     <div ref={wrapRef} style={{position:"relative",...(width?{width}:{flex:1})}}>
       <div style={label}>{lbl}</div>
-      <input value={value||""} autoComplete="off" onFocus={()=>setOpen(true)} onChange={e=>{onChange(e.target.value);setOpen(true)}} style={inputStyle}/>
+      <input value={valueStr} autoComplete="off" onFocus={()=>setOpen(true)} onChange={e=>{onChange(e.target.value);setOpen(true)}} style={inputStyle}/>
       {open && filtered.length>0 && (
         <div style={{position:"absolute",zIndex:30,top:"100%",left:0,right:0,maxHeight:220,overflowY:"auto",background:"#1a1a22",border:`1px solid ${BRD}`,marginTop:2}}>
           {filtered.map(opt=>(
@@ -321,9 +340,9 @@ export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
   const scrollToEnd=()=>listRef.current?.scrollTo({top:listRef.current.scrollHeight,behavior:"smooth"});
 
   if(editingOffer){
-    return <OfferEditor initial={editingOffer} priceTiers={priceTiers} listOptions={listOptions}
+    return <OfferEditorBoundary key={editingOffer.Id||"new"} onBack={()=>setEditingOffer(null)}><OfferEditor initial={editingOffer} priceTiers={priceTiers} listOptions={listOptions}
       onBack={()=>setEditingOffer(null)} onSaved={onSaved} copiedOffer={copiedOffer} onPaste={()=>setCopiedOffer(null)}
-      onOpenCampaign={(offer)=>onOpenCampaign?.(offer.Id)}/>;
+      onOpenCampaign={(offer)=>onOpenCampaign?.(offer.Id)}/></OfferEditorBoundary>;
   }
 
   return (
