@@ -6,6 +6,7 @@ import CardRouletteSimulator from "./CardRouletteSimulator";
 import PersonalEventSimulator from "./PersonalEventSimulator";
 import GameOffersConstructor from "./GameOffersConstructor";
 import TraderVanSimulator from "./TraderVanSimulator";
+import TemplateEventSimulator from "./TemplateEventSimulator";
 import NotesPage from "./NotesPage";
 import EventCalendar from "./EventCalendar";
 import { VscChromeClose, VscChromeMaximize, VscChromeMinimize, VscChromeRestore } from "react-icons/vsc";
@@ -988,10 +989,10 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
   return (
     <div className="tools-page" style={{height:"100%",background:BG,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div className="tools-feature-header">
-        <div><span>PROBABILITY LAB</span><h1>{activeTool==="content"?"Подбор Контента":activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":activeTool==="cardroulette"?"Card Roulette":activeTool==="personalevent"?"Personal Event":activeTool==="tradervan"?"Trader Van":"Offer Constructor"}</h1></div>
+        <div><span>PROBABILITY LAB</span><h1>{activeTool==="content"?"Подбор Контента":activeTool==="lootbox"?"Lootbox Simulator":activeTool==="lottery"?"Lottery Simulator":activeTool==="cardroulette"?"Card Roulette":activeTool==="personalevent"?"Personal Event":activeTool==="tradervan"?"Trader Van":activeTool==="templateevent"?"Template Event":"Offer Constructor"}</h1></div>
         <div style={{flex:1}}/>
         {!hideSelector&&<div style={{display:"flex",background:BG,borderRadius:20,padding:3,border:`1px solid ${BRD}`}}>
-          {[["content","Подбор Контента"],["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"],["cardroulette","Card Roulette"],["personalevent","Personal Event"],["tradervan","Trader Van"]].map(([k,l])=>(
+          {[["content","Подбор Контента"],["offers","Offer Constructor"],["lootbox","Lootbox Sim"],["lottery","Lottery Sim"],["cardroulette","Card Roulette"],["personalevent","Personal Event"],["tradervan","Trader Van"],["templateevent","Template Event"]].map(([k,l])=>(
             <button key={k} onClick={()=>setActiveTool(k)} style={{padding:"6px 16px",borderRadius:18,fontSize:11,fontWeight:700,fontFamily:ZZZ,fontStyle:"italic",cursor:"pointer",border:"none",background:activeTool===k?A:"transparent",color:activeTool===k?"#000":T2,transition:"all .2s"}}>{l}</button>
           ))}
         </div>}
@@ -1005,6 +1006,7 @@ function ToolsTab({initialTool="offers",hideSelector=false,items=[],settingsList
           <div style={{display:activeTool==="cardroulette"?"block":"none",paddingTop:18}}><CardRouletteSimulator/></div>
           <div style={{display:activeTool==="personalevent"?"block":"none",paddingTop:18}}><PersonalEventSimulator/></div>
           <div style={{display:activeTool==="tradervan"?"block":"none",paddingTop:18}}><TraderVanSimulator/></div>
+          <div style={{display:activeTool==="templateevent"?"block":"none",paddingTop:18}}><TemplateEventSimulator/></div>
         </div>
       </div>
     </div>
@@ -1028,12 +1030,12 @@ const APP_SECTIONS=[
   {id:"configs",label:"Конфиги",icon:"config",builtIn:true,items:CONFIGS.map((item,index)=>({id:`config-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"files",label:"Файлы",icon:"home",builtIn:true,items:FILES.map((item,index)=>({id:item.url===SHEETS_URL?"event-sheet":`file-${index}`,label:item.name,url:item.url,icon:linkIcon(item)}))},
   {id:"tools",label:"Инструменты",icon:"tools",builtIn:true,items:[
-    {id:"content",label:"Подбор Контента"},{id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"},{id:"cardroulette",label:"Card Roulette"},{id:"personalevent",label:"Personal Event"},{id:"tradervan",label:"Trader Van"}
+    {id:"content",label:"Подбор Контента"},{id:"offers",label:"Offer Constructor"},{id:"lootbox",label:"Lootbox Simulator"},{id:"lottery",label:"Lottery Simulator"},{id:"cardroulette",label:"Card Roulette"},{id:"personalevent",label:"Personal Event"},{id:"tradervan",label:"Trader Van"},{id:"templateevent",label:"Template Event"}
   ]},
 ];
 
-const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",content:"Подбор Контента",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator",cardroulette:"Card Roulette",personalevent:"Personal Event",tradervan:"Trader Van"};
-const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",content:"tools",offers:"tools",lootbox:"tools",lottery:"tools",cardroulette:"tools",personalevent:"tools",tradervan:"tools"};
+const PAGE_TITLES={tasks:"Мои задачи",events:"График ивентов",notes:"Заметки",content:"Подбор Контента",offers:"Offer Constructor",lootbox:"Lootbox Simulator",lottery:"Lottery Simulator",cardroulette:"Card Roulette",personalevent:"Personal Event",tradervan:"Trader Van",templateevent:"Template Event"};
+const PAGE_SECTIONS={tasks:"dashboard",events:"dashboard",notes:"dashboard",content:"tools",offers:"tools",lootbox:"tools",lottery:"tools",cardroulette:"tools",personalevent:"tools",tradervan:"tools",templateevent:"tools"};
 
 function normalizeNavigation(source){
   const saved=Array.isArray(source)?source:[];
