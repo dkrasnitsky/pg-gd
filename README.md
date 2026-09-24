@@ -1,16 +1,58 @@
-# React + Vite
+# PG3D Workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Локальное Windows-приложение (React + Vite + Electron) для геймдизайнеров PG3D — единая рабочая среда для планирования ивентов, конфигурации офферов и балансов, без ручной работы с Google Sheets напрямую.
 
-Currently, two official plugins are available:
+## Разделы
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**Дашборд**
+- Мои задачи
+- График ивентов — календарь всех запускаемых активностей, синхронизация с EventCenterConfigV2, актуальный список карт
+- Заметки
 
-## React Compiler
+**Инструменты**
+- Подбор Контента — каталог предметов, синк с таблицей аналитики (тир/тип/редкость/летальность/распространённость), реальные названия оружия из Unity
+- Offer Constructor — офферы (GameOffersSystem): список, редактор, кампании, тестовый конфиг
+- Lottery Simulator
+- Lootbox Simulator
+- Card Roulette
+- Personal Event — Board / Linear / TasksHorizontal / TasksVertical / TopUp / Wheel
+- Trader Van
+- Template Event — крупные многодневные ивенты (механики + задачи)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Подробности по каждой крупной фиче, найденные особенности данных и принятые решения — в `docs/features/*.md`.
 
-## Expanding the ESLint configuration
+## Требования
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Windows 10/11 x64.
+- Google-аккаунт с доступом **на редактирование** ко всем таблицам, которые использует нужный вам инструмент (см. `docs/features/*.md` — там перечислены конкретные таблицы и листы для каждой фичи).
+- Собственный OAuth-клиент для Google Sheets API (тип **Desktop app**, JSON-файл) — приложение попросит его выбрать при первом обращении к Sheets. Токен сохраняется локально через Electron `safeStorage`, ни OAuth-файл, ни токен никогда не попадают в репозиторий.
+
+## Запуск из исходников
+
+```bash
+npm install
+npm run desktop      # собрать и запустить локально, без установки
+```
+
+## Сборка установщика
+
+```bash
+npm run dist
+```
+
+Установщик появится в `release-v<N>/PG3D-Workspace-Setup-<version>.exe`. Эта папка не попадает в git (см. `.gitignore`) — установщики раздаются отдельно (см. GitHub Releases репозитория).
+
+## Структура проекта
+
+- `electron/main.cjs` — бэкенд: локальный сервер, хранение данных, Google OAuth, вся работа с Google Sheets API.
+- `electron/preload.cjs` — безопасный мост между React и Electron.
+- `src/App.jsx` — оболочка, навигация, вкладки, настройки.
+- `src/*.jsx` — остальные страницы и инструменты (по одному файлу на крупную фичу).
+- `docs/features/*.md` — документация по фичам: что где лежит, какие особенности данных нашлись, какие решения приняты и почему.
+
+## Правила при доработке
+
+- Перед изменениями — смотреть `docs/features/`, там уже задокументированы найденные особенности таблиц (например, даты, хранящиеся как число Google Sheets, а не текст) — чтобы не наступать на те же грабли повторно.
+- Не коммитить OAuth JSON, токены, файлы пользовательских данных (`navigation.json`, `workspace.json`, `notes.json`, `calendar.json`) — всё это уже в `.gitignore`.
+- Не редактировать `dist`/`release-*` руками.
+- Не менять структуру существующих Google Sheets без явной необходимости — большинство функций читают колонки по названию, а не по позиции, это специально, чтобы таблицы можно было безопасно расширять.
