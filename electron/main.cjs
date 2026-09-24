@@ -14,7 +14,7 @@ const cardRouletteTestSpreadsheetId="1lIRQ8FT0vWZcsgHwl1clhZrNuY2RxCGV7faf_0hl5J
 const cardRouletteScheduleGid=1041170058;
 const eventCenterCardRouletteGid=641877320;
 const eventCenterTestCardRouletteGid=387562133;
-const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances","gameOffersCache","traderVanBalances"]);
+const storeKeys=new Set(["navigation","workspace","notes","calendar","items","settings","lotteryBalances","cardRouletteBalances","personalEventBoardBalances","personalEventLinearBalances","personalEventTasksHorizontalBalances","personalEventTasksVerticalBalances","personalEventTopUpBalances","personalEventWheelBalances","gameOffersCache","traderVanBalances","offerCampaigns"]);
 const storeWrites=new Map();
 const lotterySpreadsheetId="1d2mBr0-yDswgyFzTeaFHdbNEizukTEtCtaYkG3PzouI";
 const lotteryTestSpreadsheetId="10s8UQTOfFupR3afkyU0nmvKo_crLPjREHFTolesQK54";
@@ -1510,20 +1510,27 @@ ipcMain.handle("google:sync-template-events",async(_event,target)=>{
 const PROGRESS_LEVEL_MAIN_FIELDS=["MainRewards","MainRewardsAlternative","ShowMainRewardsInPreview","LockParams"];
 
 function parseProgressLevelSheet(rows){
-  const mainHeaderIdx=rows.findIndex(row=>row&&row.includes("MainRewards"));
-  if(mainHeaderIdx<0)return null;
-  const mainHeader=rows[mainHeaderIdx];
-  const mainDataRow=rows[mainHeaderIdx+1]||[];
-  const mainFields={};
-  for(const name of PROGRESS_LEVEL_MAIN_FIELDS){
-    const col=mainHeader.indexOf(name);
-    if(col>=0)mainFields[name]=mainDataRow[col]??"";
-  }
   let tableHeaderIdx=-1;
-  for(let i=mainHeaderIdx+2;i<rows.length;i++){
-    if(rows[i]&&rows[i][0]==="Id"){tableHeaderIdx=i;break}
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i];
+    if(row&&row[0]==="Id"&&row.includes("Reward")){tableHeaderIdx=i;break}
   }
-  if(tableHeaderIdx<0)return {mainFields,tableColumns:[],items:[]};
+  if(tableHeaderIdx<0)return null;
+  let metaDataIdx=-1;
+  for(let i=tableHeaderIdx-1;i>=0;i--){
+    if(rows[i]&&rows[i].some(cell=>cell!==""&&cell!==undefined)){metaDataIdx=i;break}
+  }
+  const mainFields={};
+  const mainFieldNames=[];
+  if(metaDataIdx>0){
+    const metaHeaderRow=rows[metaDataIdx-1]||[];
+    const metaDataRow=rows[metaDataIdx]||[];
+    metaHeaderRow.forEach((name,col)=>{
+      if(!name)return;
+      mainFieldNames.push(name);
+      mainFields[name]=metaDataRow[col]??"";
+    });
+  }
   const tableHeaderRow=rows[tableHeaderIdx];
   const tableColumns=tableHeaderRow.filter(cell=>cell!==undefined&&cell!=="");
   const items=[];
@@ -1534,7 +1541,7 @@ function parseProgressLevelSheet(rows){
     tableHeaderRow.forEach((colName,ci)=>{if(colName)item[colName]=row[ci]??""});
     items.push(item);
   }
-  return {mainFields,tableColumns,items};
+  return {mainFields,mainFieldNames,tableColumns,items};
 }
 
 async function writeProgressLevelSheet(accessToken,spreadsheetId,sheetTitle,data){
@@ -1542,21 +1549,32 @@ async function writeProgressLevelSheet(accessToken,spreadsheetId,sheetTitle,data
   const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
   const sheetId=(meta.sheets||[]).find(entry=>entry.properties.title===sheetTitle)?.properties.sheetId;
   if(sheetId===undefined)throw new Error(`Лист «${sheetTitle}» не найден`);
-  const mainHeaderIdx=rows.findIndex(row=>row&&row.includes("MainRewards"));
-  if(mainHeaderIdx<0)throw new Error(`Не найден блок MainRewards на листе «${sheetTitle}»`);
-  const mainHeader=rows[mainHeaderIdx];
-  const mainDataRow=mainHeaderIdx+2;
-  const cellUpdates=[];
-  for(const name of PROGRESS_LEVEL_MAIN_FIELDS){
-    const col=mainHeader.indexOf(name);
-    if(col<0)continue;
-    cellUpdates.push({range:`${quotedTitle}!${colLetter(col)}${mainDataRow}`,values:[[data.mainFields?.[name]??""]]});
-  }
   let tableHeaderIdx=-1;
-  for(let i=mainHeaderIdx+2;i<rows.length;i++){
-    if(rows[i]&&rows[i][0]==="Id"){tableHeaderIdx=i;break}
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i];
+    if(row&&row[0]==="Id"&&row.includes("Reward")){tableHeaderIdx=i;break}
   }
   if(tableHeaderIdx<0)throw new Error(`Не найдена таблица наград на листе «${sheetTitle}»`);
+  let metaDataIdx=-1;
+  for(let i=tableHeaderIdx-1;i>=0;i--){
+    if(rows[i]&&rows[i].some(cell=>cell!==""&&cell!==undefined)){metaDataIdx=i;break}
+  }
+  const cellUpdates=[];
+  const toNumberOrValue=value=>{
+    if(value===undefined||value===null||value==="")return value??"";
+    if(typeof value==="boolean")return value;
+    const trimmed=String(value).trim();
+    const num=Number(trimmed);
+    return (trimmed!==""&&Number.isFinite(num)&&String(num)===trimmed)?num:value;
+  };
+  if(metaDataIdx>0&&data.mainFields){
+    const metaHeaderRow=rows[metaDataIdx-1];
+    const metaDataRowNumber=metaDataIdx+1;
+    metaHeaderRow.forEach((name,col)=>{
+      if(!name||data.mainFields[name]===undefined)return;
+      cellUpdates.push({range:`${quotedTitle}!${colLetter(col)}${metaDataRowNumber}`,values:[[toNumberOrValue(data.mainFields[name])]]});
+    });
+  }
   const tableHeaderRow=rows[tableHeaderIdx];
   let existingCount=0;
   for(let i=tableHeaderIdx+1;i<rows.length;i++){
@@ -1580,7 +1598,7 @@ async function writeProgressLevelSheet(accessToken,spreadsheetId,sheetTitle,data
     const row=firstDataRow+index;
     tableHeaderRow.forEach((colName,ci)=>{
       if(!colName)return;
-      cellUpdates.push({range:`${quotedTitle}!${colLetter(ci)}${row}`,values:[[item[colName]??""]]});
+      cellUpdates.push({range:`${quotedTitle}!${colLetter(ci)}${row}`,values:[[toNumberOrValue(item[colName])]]});
     });
   });
   if(cellUpdates.length)await sheetsRequest(accessToken,`${api}/values:batchUpdate`,{method:"POST",body:JSON.stringify({valueInputOption:"RAW",data:cellUpdates})});
@@ -1621,6 +1639,57 @@ ipcMain.handle("google:load-template-event",async(_event,payload)=>{
   }
 
   return result;
+});
+
+ipcMain.handle("google:audit-template-events",async()=>{
+  const accessToken=await getGoogleAccessToken();
+  const summary={};
+  for(const [label,spreadsheetId] of [["prod",templateEventSpreadsheetId],["test",templateEventTestSpreadsheetId]]){
+    const {events}=await readTemplateEventSchedule(accessToken,spreadsheetId);
+    const api=`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`;
+    const meta=await sheetsRequest(accessToken,`${api}?fields=sheets.properties(sheetId,title)`);
+    const allTitles=(meta.sheets||[]).map(entry=>entry.properties.title);
+    const signatures={};
+    const perEvent=[];
+    for(const ev of events){
+      const suffix=`_${ev.eventName}`;
+      const matching=allTitles.filter(title=>title.endsWith(suffix));
+      const tabsInfo=[];
+      for(const title of matching){
+        const prefix=title.slice(0,title.length-suffix.length);
+        if(title===`Common_${ev.eventName}`||title===`Tasks_Group_${ev.eventName}`){
+          tabsInfo.push({title,prefix,kind:prefix});
+          continue;
+        }
+        try{
+          await new Promise(resolve=>setTimeout(resolve,1100));
+          const {rows}=await readSheetValues(accessToken,spreadsheetId,title);
+          const parsed=parseProgressLevelSheet(rows);
+          if(parsed&&parsed.tableColumns.length){
+            const sig=`MainRewards[${Object.keys(parsed.mainFields).join(",")}]+Table[${parsed.tableColumns.join(",")}]`;
+            signatures[sig]=signatures[sig]||{count:0,examples:[]};
+            signatures[sig].count++;
+            if(signatures[sig].examples.length<3)signatures[sig].examples.push(title);
+            tabsInfo.push({title,prefix,kind:"matched",signature:sig});
+          }else{
+            const sample=rows.filter(row=>row&&row.some(cell=>cell!==""&&cell!==undefined)).slice(0,15);
+            const sig=`RAW:${prefix.replace(/_\d+$/,"_N")}`;
+            signatures[sig]=signatures[sig]||{count:0,examples:[],sampleRows:sample};
+            signatures[sig].count++;
+            if(signatures[sig].examples.length<3)signatures[sig].examples.push(title);
+            tabsInfo.push({title,prefix,kind:"unmatched"});
+          }
+        }catch(error){
+          tabsInfo.push({title,prefix,kind:"error",error:error.message});
+        }
+      }
+      perEvent.push({eventName:ev.eventName,status:ev.status,tabs:tabsInfo});
+    }
+    summary[label]={totalSheets:allTitles.length,eventsCount:events.length,signatures,perEvent};
+  }
+  const outPath=path.join(process.cwd(),"_audit-template-events.json");
+  await fs.promises.writeFile(outPath,JSON.stringify(summary,null,2),"utf8");
+  return {outPath,ok:true};
 });
 
 ipcMain.handle("google:save-template-event",async(_event,payload)=>{

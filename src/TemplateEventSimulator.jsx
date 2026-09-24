@@ -53,6 +53,7 @@ function SearchableEventPicker({events,value,onSelect}){
 
 const emptyShop=()=>({name:"",offerIds:"",unlockByProgress:""});
 const emptyTask=()=>({groupName:"",Group:"",Index:"",TaskId:"",NeededCount:"",Rewards:"",Priority:"",IsPremium:false,ConditionType:"",IntParams:"",ItemIndex:"",ItemType:"",ItemCategory:""});
+const BOOL_COLUMNS=["IsPremium","ShowInPreview","ShowMainRewardsInPreview","AutoPurchase","Cool","HideReward"];
 
 const META_LABELS={
   Style:"Style",LevelOpen:"LevelOpen",MechanicIds:"MechanicIds",InfoStageDuration:"InfoStageDuration",
@@ -139,7 +140,7 @@ function ProgressLevelEditor({title,tab,onChange}){
   const updateItem=(index,p)=>onChange({...parsed,items:parsed.items.map((it,i)=>i===index?{...it,...p}:it)});
   const addItem=()=>{
     const blank={};
-    parsed.tableColumns.forEach(col=>{blank[col]=col==="IsPremium"||col==="ShowInPreview"?false:""});
+    parsed.tableColumns.forEach(col=>{blank[col]=BOOL_COLUMNS.includes(col)?false:""});
     onChange({...parsed,items:[...parsed.items,blank]});
   };
   const removeItem=index=>onChange({...parsed,items:parsed.items.filter((_,i)=>i!==index)});
@@ -149,7 +150,7 @@ function ProgressLevelEditor({title,tab,onChange}){
     <div style={{color:T1}}>
       <div style={{fontSize:12,fontWeight:700,marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>{title} — основная награда</div>
       <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20,alignItems:"flex-end"}}>
-        {Object.keys(parsed.mainFields).map(name=>name==="ShowMainRewardsInPreview"?(
+        {Object.keys(parsed.mainFields).map(name=>BOOL_COLUMNS.includes(name)?(
           <CheckField key={name} lbl={name} checked={boolLike(parsed.mainFields[name])} onChange={v=>patchMain({[name]:v})}/>
         ):(
           <TextField key={name} lbl={name} value={parsed.mainFields[name]} onChange={v=>patchMain({[name]:v})} width={220}/>
@@ -168,7 +169,7 @@ function ProgressLevelEditor({title,tab,onChange}){
               <tr key={index} style={{borderTop:`1px solid ${BRD}`}}>
                 {parsed.tableColumns.map(col=>(
                   <td key={col} style={{padding:"4px 6px"}}>
-                    {(col==="IsPremium"||col==="ShowInPreview")
+                    {BOOL_COLUMNS.includes(col)
                       ? <input type="checkbox" checked={boolLike(item[col])} onChange={e=>updateItem(index,{[col]:e.target.checked})} style={{width:16,height:16,accentColor:A,cursor:"pointer"}}/>
                       : <input value={item[col]??""} onChange={e=>updateItem(index,{[col]:e.target.value})} style={inputStyle}/>}
                   </td>

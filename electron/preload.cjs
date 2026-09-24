@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld("workspaceGoogle", {
   syncTemplateEvents: (target) => ipcRenderer.invoke("google:sync-template-events", target),
   loadTemplateEvent: (payload) => ipcRenderer.invoke("google:load-template-event", payload),
   saveTemplateEvent: (payload) => ipcRenderer.invoke("google:save-template-event", payload),
+  auditTemplateEvents: () => ipcRenderer.invoke("google:audit-template-events"),
   getRewardPools: () => ipcRenderer.invoke("google:get-reward-pools"),
   applyLotteryPartition: (partition) => ipcRenderer.invoke("google:apply-lottery-partition", partition),
   getNextCardRouletteId: (isTest) => ipcRenderer.invoke("google:get-next-card-roulette-id", isTest),

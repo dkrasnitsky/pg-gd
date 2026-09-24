@@ -592,6 +592,7 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
   const [startDate,setStartDate]=useState(event.offerCampaignConfig?.startDate||`${event.start}T${event.startTime||"09:00"}`);
   const [endDate,setEndDate]=useState(event.offerCampaignConfig?.endDate||`${event.end}T${event.endTime||"09:00"}`);
   const [allOffers,setAllOffers]=useState([]);
+  const [savedCampaigns,setSavedCampaigns]=useState([]);
   const [addedIds,setAddedIds]=useState(event.offerCampaignConfig?.offerIds||event.sourceEventIds||[]);
   const [search,setSearch]=useState("");
   const [showPicker,setShowPicker]=useState(false);
@@ -602,7 +603,17 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
     window.workspaceStore?.read("gameOffersCache").then(cache=>{
       if(cache&&Array.isArray(cache.offers))setAllOffers(cache.offers);
     }).catch(()=>{});
+    window.workspaceStore?.read("offerCampaigns").then(list=>{
+      if(Array.isArray(list))setSavedCampaigns(list);
+    }).catch(()=>{});
   },[]);
+
+  const applySavedCampaign=campaignName=>{
+    const campaign=savedCampaigns.find(c=>c.name===campaignName);
+    if(!campaign)return;
+    setAddedIds(prev=>[...new Set([...prev,...campaign.offerIds])]);
+    if(!name||name==="Кампания офферов")setName(campaign.name);
+  };
 
   const addedOffers=addedIds.map(id=>allOffers.find(o=>o.Id===id)).filter(Boolean);
   const pickable=allOffers.filter(o=>!addedIds.includes(o.Id)&&(!search.trim()||offerLabel(o).toLowerCase().includes(search.toLowerCase())));
@@ -660,6 +671,14 @@ function OfferCampaignConfigurator({event,onClose,onSave,onOpenOffer}){
           <label>Даты старта<input type="datetime-local" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
           <label>Даты окончания<input type="datetime-local" value={endDate} onChange={e=>setEndDate(e.target.value)}/></label>
         </div>
+        {savedCampaigns.length>0 && (
+          <label>Заполнить из сохранённой кампании
+            <select value="" onChange={e=>{if(e.target.value)applySavedCampaign(e.target.value)}}>
+              <option value="">Выбрать...</option>
+              {savedCampaigns.map(c=><option key={c.name} value={c.name}>{c.name} ({c.offerIds.length} офферов)</option>)}
+            </select>
+          </label>
+        )}
 
         <div style={{fontSize:11,color:"#91a293",textTransform:"uppercase",letterSpacing:0.5,margin:"14px 0 6px"}}>Офферы</div>
         {addedOffers.map(offer=>(

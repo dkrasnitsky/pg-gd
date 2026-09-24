@@ -250,6 +250,85 @@ function OfferEditor({initial,priceTiers,listOptions,onBack,onSaved,onOpenCampai
   );
 }
 
+function CampaignEditor({campaign,offers,onBack,onSave,onOpenOffer}){
+  const [name,setName]=useState(campaign.name||"");
+  const [offerIds,setOfferIds]=useState(campaign.offerIds||[]);
+  const [search,setSearch]=useState("");
+  const [showPicker,setShowPicker]=useState(false);
+
+  const addedOffers=offerIds.map(id=>offers.find(o=>o.Id===id)).filter(Boolean);
+  const pickable=offers.filter(o=>!offerIds.includes(o.Id)&&(!search.trim()||offerTitle(o).toLowerCase().includes(search.trim().toLowerCase())));
+
+  const save=()=>{
+    if(!name.trim()){alert("Введите название кампании");return}
+    if(!offerIds.length){alert("Добавьте хотя бы один оффер");return}
+    onSave({name:name.trim(),offerIds});
+  };
+
+  return (
+    <div style={{color:T1,height:"100%",overflowY:"auto"}}>
+      <button onClick={onBack} style={{marginBottom:16,padding:"6px 12px",background:"transparent",border:`1px solid ${BRD}`,color:T2,fontSize:11,cursor:"pointer"}}>← К кампаниям</button>
+      <div style={{marginBottom:16,maxWidth:320}}><TextField lbl="Название кампании" value={name} onChange={setName}/></div>
+
+      <div style={{fontSize:11,color:T2,marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>Офферы в кампании ({addedOffers.length})</div>
+      {addedOffers.map(offer=>(
+        <div key={offer.Id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",border:`1px solid ${BRD}`,marginBottom:6,fontSize:12}}>
+          <span>{offerTitle(offer)}{offer.IsEnable===false&&<small style={{color:T2,marginLeft:8}}>выключен</small>}</span>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>onOpenOffer(offer.Id)} style={{padding:"5px 12px",background:"transparent",border:`1px solid ${A}`,color:A,fontSize:11,cursor:"pointer"}}>В редактор</button>
+            <button onClick={()=>setOfferIds(prev=>prev.filter(id=>id!==offer.Id))} style={{background:"transparent",border:"none",color:DNG,cursor:"pointer",fontSize:16}}>×</button>
+          </div>
+        </div>
+      ))}
+      {offerIds.length>addedOffers.length && <div style={{fontSize:11,color:T2,marginBottom:6}}>Сохранено в кампании, но не найдено в локальном кэше: {offerIds.length-addedOffers.length} — нажмите «Синхронизация» на экране офферов.</div>}
+
+      {!showPicker && <button onClick={()=>setShowPicker(true)} style={{width:36,height:36,background:A,border:"none",color:"#000",fontWeight:800,fontSize:16,cursor:"pointer"}}>+</button>}
+      {showPicker && (
+        <div style={{border:`1px solid ${BRD}`,padding:10,marginTop:10,maxWidth:400}}>
+          <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск оффера..." style={{...inputStyle,marginBottom:8}}/>
+          <div style={{maxHeight:220,overflowY:"auto"}}>
+            {pickable.length===0&&<div style={{fontSize:11,color:T2,padding:6}}>Ничего не найдено</div>}
+            {pickable.slice(0,50).map(o=>(
+              <div key={o.Id} onClick={()=>{setOfferIds(prev=>[...prev,o.Id]);setShowPicker(false);setSearch("")}} style={{padding:"6px 8px",fontSize:12,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=SRF} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{offerTitle(o)}</div>
+            ))}
+          </div>
+          <button onClick={()=>{setShowPicker(false);setSearch("")}} style={{marginTop:8,padding:"6px 12px",background:"transparent",border:`1px solid ${BRD}`,color:T2,fontSize:11,cursor:"pointer"}}>Закрыть</button>
+        </div>
+      )}
+
+      <div style={{marginTop:24,paddingBottom:24}}>
+        <button onClick={save} style={{padding:"10px 24px",background:A,border:"none",color:"#000",fontSize:12,fontWeight:800,cursor:"pointer"}}>Сохранить кампанию</button>
+      </div>
+    </div>
+  );
+}
+
+function CampaignsListScreen({campaigns,onBack,onEdit,onNew,onRestart,onDelete,busyName}){
+  return (
+    <div style={{color:T1,height:"100%",display:"flex",flexDirection:"column"}}>
+      <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
+        <button onClick={onBack} style={{padding:"6px 12px",background:"transparent",border:`1px solid ${BRD}`,color:T2,fontSize:11,cursor:"pointer"}}>← К офферам</button>
+        <button onClick={onNew} style={{padding:"9px 18px",background:"transparent",border:`1px solid ${A}`,color:A,fontSize:12,fontWeight:800,cursor:"pointer"}}>+ Новая кампания</button>
+      </div>
+      {campaigns.length===0 && <div style={{color:T2,fontSize:12,padding:16}}>Кампаний пока нет.</div>}
+      {campaigns.map(c=>(
+        <div key={c.name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",border:`1px solid ${BRD}`,marginBottom:8}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>{c.name}</div>
+            <div style={{fontSize:11,color:T2}}>{c.offerIds.length} офферов</div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>onEdit(c)} style={{padding:"7px 14px",background:"transparent",border:`1px solid ${A}`,color:A,fontSize:11,cursor:"pointer"}}>Редактировать</button>
+            <button disabled={busyName===c.name} onClick={()=>onRestart(c)} style={{padding:"7px 14px",background:A,border:"none",color:"#000",fontSize:11,fontWeight:700,cursor:"pointer"}}>{busyName===c.name?"...":"Перезапустить (копия)"}</button>
+            <button onClick={()=>onDelete(c)} style={{padding:"7px 14px",background:"transparent",border:`1px solid ${DNG}`,color:DNG,fontSize:11,cursor:"pointer"}}>Удалить</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
   const [offers,setOffers]=useState([]);
   const [priceTiers,setPriceTiers]=useState({});
@@ -258,7 +337,16 @@ export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
   const [status,setStatus]=useState({state:"idle",message:""});
   const [copiedOffer,setCopiedOffer]=useState(null);
   const [editingOffer,setEditingOffer]=useState(null);
+  const [screen,setScreen]=useState("offers");
+  const [campaigns,setCampaigns]=useState([]);
+  const [editingCampaign,setEditingCampaign]=useState(null);
+  const [campaignBusy,setCampaignBusy]=useState(null);
   const listRef=useRef(null);
+
+  useEffect(()=>{
+    window.workspaceStore?.read("offerCampaigns").then(list=>{if(Array.isArray(list))setCampaigns(list)}).catch(()=>{});
+  },[]);
+  const persistCampaigns=async next=>{setCampaigns(next);await window.workspaceStore?.write("offerCampaigns",next).catch(()=>{})};
 
   useEffect(()=>{
     window.workspaceStore?.read("gameOffersCache").then(cache=>{
@@ -331,6 +419,52 @@ export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
     setEditingOffer(savedOffer);
   };
 
+  const saveCampaign=async campaign=>{
+    const exists=campaigns.some(c=>c.name===campaign.name);
+    if(exists&&editingCampaign?.name!==campaign.name){alert(`Кампания «${campaign.name}» уже есть`);return}
+    const next=exists?campaigns.map(c=>c.name===campaign.name?campaign:c):[...campaigns,campaign];
+    await persistCampaigns(next);
+    setEditingCampaign(null);
+    setStatus({state:"success",message:`Кампания «${campaign.name}» сохранена`});
+  };
+
+  const deleteCampaign=async campaign=>{
+    if(!window.confirm(`Удалить кампанию «${campaign.name}»? Сами офферы в таблице останутся — удалится только сама карточка кампании.`))return;
+    await persistCampaigns(campaigns.filter(c=>c.name!==campaign.name));
+  };
+
+  const restartCampaign=async campaign=>{
+    const newName=window.prompt(`Новое название для копии кампании «${campaign.name}» (офферы внутри получат новые id):`,`${campaign.name} (2)`);
+    if(!newName||!newName.trim())return;
+    const finalName=newName.trim();
+    if(campaigns.some(c=>c.name===finalName)){alert("Кампания с таким названием уже есть");return}
+    setCampaignBusy(campaign.name);
+    setStatus({state:"loading",message:`Копируем офферы кампании «${campaign.name}» в «${finalName}»...`});
+    try{
+      const newIds=[];
+      for(const id of campaign.offerIds){
+        const offer=offers.find(o=>o.Id===id);
+        if(!offer)continue;
+        const payload=buildCopyPayload(offer);
+        const result=await window.workspaceGoogle?.saveOffer({offer:payload});
+        if(result?.id)newIds.push(result.id);
+      }
+      if(!newIds.length)throw new Error("Не удалось скопировать ни один оффер — проверьте, что они загружены («Синхронизация»)");
+      await persistCampaigns([...campaigns,{name:finalName,offerIds:newIds}]);
+      await sync();
+      setStatus({state:"success",message:`Готово: создана кампания «${finalName}» (${newIds.length} из ${campaign.offerIds.length} офферов)`});
+    }catch(error){
+      setStatus({state:"error",message:error.message||"Ошибка при перезапуске кампании"});
+    }finally{
+      setCampaignBusy(null);
+    }
+  };
+
+  const openOfferFromCampaign=id=>{
+    const found=offers.find(item=>item.Id===id);
+    if(found){setScreen("offers");setEditingCampaign(null);setEditingOffer(found)}
+  };
+
   const filtered=offers.filter(offer=>{
     if(!search.trim())return true;
     return offerTitle(offer).toLowerCase().includes(search.trim().toLowerCase());
@@ -345,11 +479,21 @@ export default function GameOffersConstructor({pendingOfferId,onOpenCampaign}){
       onOpenCampaign={(offer)=>onOpenCampaign?.(offer.Id)}/></OfferEditorBoundary>;
   }
 
+  if(screen==="campaigns"){
+    if(editingCampaign){
+      return <CampaignEditor campaign={editingCampaign} offers={offers} onBack={()=>setEditingCampaign(null)} onSave={saveCampaign} onOpenOffer={openOfferFromCampaign}/>;
+    }
+    return <CampaignsListScreen campaigns={campaigns} onBack={()=>setScreen("offers")}
+      onNew={()=>setEditingCampaign({name:"",offerIds:[]})} onEdit={c=>setEditingCampaign(c)}
+      onRestart={restartCampaign} onDelete={deleteCampaign} busyName={campaignBusy}/>;
+  }
+
   return (
     <div style={{color:T1,height:"100%",display:"flex",flexDirection:"column",minHeight:0}}>
       <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexShrink:0}}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по названию..." style={{...inputStyle,flex:1}}/>
         <button disabled title="Скоро" style={{padding:"9px 18px",background:"transparent",border:`1px solid ${BRD}`,color:T2,fontSize:12,fontWeight:700,cursor:"default",opacity:0.6,whiteSpace:"nowrap"}}>Всякие фильтры</button>
+        <button onClick={()=>setScreen("campaigns")} style={{padding:"9px 18px",background:"transparent",border:`1px solid ${A}`,color:A,fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>Кампании</button>
         <button onClick={()=>setEditingOffer(emptyOffer())} style={{padding:"9px 18px",background:"transparent",border:`1px solid ${A}`,color:A,fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>+ Новый оффер</button>
         <button onClick={sync} disabled={status.state==="loading"} style={{padding:"9px 18px",background:A,border:"none",color:"#000",fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>{status.state==="loading"?"...":"Синхронизация"}</button>
       </div>
